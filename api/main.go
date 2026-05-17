@@ -179,6 +179,41 @@ func main() {
 
 			c.JSON(http.StatusOK, gin.H{"status": "delivered", "email_id": email.ID})
 		})
+
+		// 批量投递：一次 HTTP 调用写入多个收件人。
+		// 用于 LMTP 守护进程把同一会话的多个 RCPT 合并提交。
+		// 任意一条失败会返回 5xx，调用方应当重试整批，避免丢邮件。
+		internal.POST("/deliver-batch", func(c *gin.Context) {
+			var req struct {
+				Recipients []string `json:"recipients" binding:"required,min=1"`
+				Sender     string   `json:"sender"`
+				Subject    string   `json:"subject"`
+				BodyText   string   `json:"body_text"`
+				BodyHTML   string   `json:"body_html"`
+				Raw        string   `json:"raw"`
+			}
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+
+			results := make([]gin.H, 0, len(req.Recipients))
+			for _, rcpt := range req.Recipients {
+				mailbox, err := db.GetMailboxByFullAddress(c.Request.Context(), rcpt)
+				if err != nil {
+					results = append(results, gin.H{"recipient": rcpt, "status": "discarded", "reason": "unknown recipient"})
+					continue
+				}
+				email, err := db.InsertEmail(c.Request.Context(),
+					mailbox.ID, req.Sender, req.Subject, req.BodyText, req.BodyHTML, req.Raw)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error(), "recipient": rcpt})
+					return
+				}
+				results = append(results, gin.H{"recipient": rcpt, "status": "delivered", "email_id": email.ID})
+			}
+			c.JSON(http.StatusOK, gin.H{"results": results})
+		})
 	}
 
 	// ==================== 邮箱自动过期清理 ====================
@@ -194,6 +229,10 @@ func main() {
 			}
 		}
 	}()
+
+	// ==================== 邮件统计计数器后台 flush ====================
+	go db.RunStatsFlusher(ctx, time.Second)
+	log.Println("✓ Email stats flusher started (interval=1s)")
 
 	// ==================== MX 自动验证轮询 ====================
 	go func() {

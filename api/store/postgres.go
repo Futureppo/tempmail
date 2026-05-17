@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"tempmail/model"
@@ -18,8 +19,49 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// emailCounters 维护写入的累计数，避免每封邮件都 UPDATE 同一行。
+// 由后台 flusher 周期性合并到数据库。
+type emailCounters struct {
+	mu      sync.Mutex
+	total   int64
+	mailbox map[uuid.UUID]int64
+}
+
+func (c *emailCounters) inc(mailboxID uuid.UUID) {
+	c.mu.Lock()
+	c.total++
+	if c.mailbox == nil {
+		c.mailbox = make(map[uuid.UUID]int64)
+	}
+	c.mailbox[mailboxID]++
+	c.mu.Unlock()
+}
+
+// snapshot 返回当前累计的内存计数（不清零，用于实时查询补偿）。
+func (c *emailCounters) snapshot() (int64, map[uuid.UUID]int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	cp := make(map[uuid.UUID]int64, len(c.mailbox))
+	for k, v := range c.mailbox {
+		cp[k] = v
+	}
+	return c.total, cp
+}
+
+// drain 取出累计值并清零，供 flush 使用。
+func (c *emailCounters) drain() (int64, map[uuid.UUID]int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	total := c.total
+	mb := c.mailbox
+	c.total = 0
+	c.mailbox = nil
+	return total, mb
+}
+
 type Store struct {
-	pool *pgxpool.Pool
+	pool     *pgxpool.Pool
+	counters emailCounters
 }
 
 // New 创建带连接池的 Store（高并发核心）
@@ -325,6 +367,9 @@ func (s *Store) GetStats(ctx context.Context) (*model.Stats, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 加上还没 flush 到数据库的内存计数，让前台看到接近实时值。
+	pendingTotal, _ := s.counters.snapshot()
+	st.TotalEmails += int(pendingTotal)
 	return &st, nil
 }
 
@@ -449,14 +494,8 @@ func CheckDomainMX(domain, serverIP string) (matched bool, mxHosts []string, sta
 // ==================== Email ====================
 
 func (s *Store) InsertEmail(ctx context.Context, mailboxID uuid.UUID, sender, subject, bodyText, bodyHTML, raw string) (*model.Email, error) {
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback(ctx)
-
 	var e model.Email
-	err = tx.QueryRow(ctx,
+	err := s.pool.QueryRow(ctx,
 		`INSERT INTO emails (mailbox_id, sender, subject, body_text, body_html, raw_message, size_bytes)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 RETURNING id, mailbox_id, sender, subject, body_text, body_html, raw_message, size_bytes, received_at`,
@@ -465,22 +504,67 @@ func (s *Store) InsertEmail(ctx context.Context, mailboxID uuid.UUID, sender, su
 	if err != nil {
 		return nil, err
 	}
-	_, err = tx.Exec(ctx, `
-		INSERT INTO app_settings (key, value) VALUES ('total_emails_received', '1')
-		ON CONFLICT (key) DO UPDATE
-		SET value = ((COALESCE(NULLIF(app_settings.value, ''), '0')::INT + 1)::TEXT), updated_at = NOW()
-	`)
-	if err != nil {
-		return nil, err
-	}
-	_, err = tx.Exec(ctx, `UPDATE mailboxes SET received_email_count = received_email_count + 1 WHERE id = $1`, mailboxID)
-	if err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
-	}
+	// 热点累加放入内存计数器，由 RunStatsFlusher 异步 flush，避免高并发争抢同一行。
+	s.counters.inc(mailboxID)
 	return &e, nil
+}
+
+// RunStatsFlusher 周期性把内存累计写回数据库。
+// 在 main.go 启动后调用一次即可（goroutine 内运行）。
+func (s *Store) RunStatsFlusher(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		interval = time.Second
+	}
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			s.flushCounters(context.Background())
+			return
+		case <-t.C:
+			s.flushCounters(ctx)
+		}
+	}
+}
+
+func (s *Store) flushCounters(ctx context.Context) {
+	total, mailboxes := s.counters.drain()
+	if total == 0 && len(mailboxes) == 0 {
+		return
+	}
+
+	if total > 0 {
+		_, err := s.pool.Exec(ctx, `
+			INSERT INTO app_settings (key, value) VALUES ('total_emails_received', $1::TEXT)
+			ON CONFLICT (key) DO UPDATE
+			SET value = ((COALESCE(NULLIF(app_settings.value, ''), '0')::BIGINT + EXCLUDED.value::BIGINT)::TEXT), updated_at = NOW()
+		`, total)
+		if err != nil {
+			// 失败时把计数加回去，下次再 flush。
+			s.counters.mu.Lock()
+			s.counters.total += total
+			s.counters.mu.Unlock()
+		}
+	}
+
+	for id, n := range mailboxes {
+		if n == 0 {
+			continue
+		}
+		_, err := s.pool.Exec(ctx,
+			`UPDATE mailboxes SET received_email_count = received_email_count + $1 WHERE id = $2`,
+			n, id,
+		)
+		if err != nil {
+			s.counters.mu.Lock()
+			if s.counters.mailbox == nil {
+				s.counters.mailbox = make(map[uuid.UUID]int64)
+			}
+			s.counters.mailbox[id] += n
+			s.counters.mu.Unlock()
+		}
+	}
 }
 
 func (s *Store) ListEmails(ctx context.Context, mailboxID uuid.UUID, page, size int) ([]model.EmailSummary, int, error) {

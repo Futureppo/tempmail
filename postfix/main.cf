@@ -21,9 +21,10 @@ relay_domains =
 local_transport = error:local delivery disabled
 local_recipient_maps =
 
-# 虚拟域名 catch-all
+# 虚拟域名 catch-all：直接通过 Postfix 内置 lmtp 客户端
+# 把邮件送给常驻 mail-receiver daemon。
 virtual_mailbox_domains = hash:/etc/postfix/virtual_domains
-virtual_transport = mailreceiver:
+virtual_transport = lmtp:unix:private/mail-receiver
 
 # 限制
 smtpd_recipient_restrictions =
@@ -31,13 +32,13 @@ smtpd_recipient_restrictions =
     reject_unauth_destination
 
 # 性能优化
-smtpd_client_connection_count_limit = 50
-smtpd_client_connection_rate_limit = 100
-default_process_limit = 100
+smtpd_client_connection_count_limit = 200
+smtpd_client_connection_rate_limit = 600
+default_process_limit = 500
 maximal_queue_lifetime = 1d
 bounce_queue_lifetime = 1d
 message_size_limit = 10240000
 
 # 并发
-smtp_destination_concurrency_limit = 20
-default_destination_concurrency_limit = 50
+smtp_destination_concurrency_limit = 50
+default_destination_concurrency_limit = 200

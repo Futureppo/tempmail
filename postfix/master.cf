@@ -29,6 +29,5 @@ anvil     unix  -       -       n       -       1       anvil
 scache    unix  -       -       n       -       1       scache
 postlog   unix-dgram n  -       n       -       1       postlogd
 
-# Pipe to Go mail receiver
-mailreceiver unix -       n       n       -       50      pipe
-  flags=DRhu user=nobody argv=/usr/local/bin/mail-receiver ${recipient}
+# 默认 lmtp 客户端足以投递到我们写的 mail-receiver daemon，
+# 自定义的 mailreceiver transport 不再需要。
