@@ -13,6 +13,7 @@ CREATE TABLE accounts (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     username    VARCHAR(64)  NOT NULL UNIQUE,
     api_key     VARCHAR(64)  NOT NULL UNIQUE,
+    linuxdo_id  VARCHAR(128) UNIQUE,
     is_admin    BOOLEAN      NOT NULL DEFAULT FALSE,
     is_active   BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
@@ -46,6 +47,7 @@ CREATE TABLE mailboxes (
     address      VARCHAR(128) NOT NULL,  -- 本地部分，如 "abc123"
     domain_id    INT          NOT NULL REFERENCES domains(id),
     full_address VARCHAR(320) NOT NULL,  -- 完整地址 "abc123@mail.xxx.xyz"
+    received_email_count INT  NOT NULL DEFAULT 0,
     created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     expires_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW() + INTERVAL '30 minutes'
 );
@@ -97,9 +99,16 @@ CREATE TABLE IF NOT EXISTS app_settings (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 INSERT INTO app_settings (key, value) VALUES ('registration_open', 'true') ON CONFLICT DO NOTHING;
+INSERT INTO app_settings (key, value) VALUES ('key_login_enabled', 'true') ON CONFLICT DO NOTHING;
+INSERT INTO app_settings (key, value) VALUES ('linuxdo_login_enabled', 'false') ON CONFLICT DO NOTHING;
+INSERT INTO app_settings (key, value) VALUES ('linuxdo_client_id', '') ON CONFLICT DO NOTHING;
+INSERT INTO app_settings (key, value) VALUES ('linuxdo_client_secret', '') ON CONFLICT DO NOTHING;
+INSERT INTO app_settings (key, value) VALUES ('linuxdo_redirect_url', '') ON CONFLICT DO NOTHING;
 INSERT INTO app_settings (key, value) VALUES ('smtp_server_ip', '') ON CONFLICT DO NOTHING;
 INSERT INTO app_settings (key, value) VALUES ('smtp_hostname', '') ON CONFLICT DO NOTHING;
 INSERT INTO app_settings (key, value) VALUES ('mailbox_ttl_minutes', '30') ON CONFLICT DO NOTHING;
+INSERT INTO app_settings (key, value) VALUES ('total_emails_received', '0') ON CONFLICT DO NOTHING;
+INSERT INTO app_settings (key, value) VALUES ('site_logo_url', '') ON CONFLICT DO NOTHING;
 
 -- ============================================================
 -- 7. 数据库性能参数（在 postgresql.conf 或 docker 环境变量中设置更佳）

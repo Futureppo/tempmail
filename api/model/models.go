@@ -12,19 +12,28 @@ type Account struct {
 	ID        uuid.UUID `json:"id"`
 	Username  string    `json:"username"`
 	APIKey    string    `json:"api_key"`
+	LinuxDOID string    `json:"linuxdo_id,omitempty"`
 	IsAdmin   bool      `json:"is_admin"`
 	IsActive  bool      `json:"is_active"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+type AccountWithStats struct {
+	Account
+	MailboxCount       int `json:"mailbox_count"`
+	ActiveMailboxCount int `json:"active_mailbox_count"`
+	CurrentEmailCount  int `json:"current_email_count"`
+	ReceivedEmailCount int `json:"received_email_count"`
+}
+
 type Domain struct {
-	ID           int        `json:"id"`
-	Domain       string     `json:"domain"`
-	IsActive     bool       `json:"is_active"`
-	Status       string     `json:"status"` // active | pending | disabled
-	CreatedAt    time.Time  `json:"created_at"`
-	MxCheckedAt  *time.Time `json:"mx_checked_at,omitempty"`
+	ID          int        `json:"id"`
+	Domain      string     `json:"domain"`
+	IsActive    bool       `json:"is_active"`
+	Status      string     `json:"status"` // active | pending | disabled
+	CreatedAt   time.Time  `json:"created_at"`
+	MxCheckedAt *time.Time `json:"mx_checked_at,omitempty"`
 }
 
 type Stats struct {

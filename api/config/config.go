@@ -6,14 +6,17 @@ import (
 )
 
 type Config struct {
-	Port          string
-	DBDSN         string
-	RedisAddr     string
-	RedisPassword string
-	RateLimit     int
-	RateWindow    int // seconds
-	SMTPServerIP  string // 仅从 SMTP_SERVER_IP 环境变量读取
-	SMTPHostname  string // 邮件服务器场指向的 hostname，不硬编码
+	Port                string
+	DBDSN               string
+	RedisAddr           string
+	RedisPassword       string
+	RateLimit           int
+	RateWindow          int    // seconds
+	SMTPServerIP        string // 仅从 SMTP_SERVER_IP 环境变量读取
+	SMTPHostname        string // 邮件服务器场指向的 hostname，不硬编码
+	LinuxDOClientID     string
+	LinuxDOClientSecret string
+	LinuxDORedirectURL  string
 }
 
 func Load() *Config {
@@ -28,16 +31,19 @@ func Load() *Config {
 		//   3. nginx/default.conf 所有 proxy_pass http://api:8080
 		//   4. postfix/entrypoint.sh curl http://api:8080
 		//   5. postfix/mail-receiver.py API_URL 默认值
-		Port: getEnv("PORT", "8080"),
+		Port:  getEnv("PORT", "8080"),
 		DBDSN: getEnv("DB_DSN", ""),
 		// ★ RedisAddr：Redis 容器内部地址，格式 "host:port"。
 		// 默认 "redis:6379"，"redis" 是 Docker 内部服务名，不需要修改。
-		RedisAddr:     getEnv("REDIS_ADDR", "redis:6379"),
-		RedisPassword: getEnv("REDIS_PASSWORD", ""),
-		RateLimit:     rl,
-		RateWindow:    rw,
-		SMTPServerIP:  os.Getenv("SMTP_SERVER_IP"),
-		SMTPHostname:  os.Getenv("SMTP_HOSTNAME"),
+		RedisAddr:           getEnv("REDIS_ADDR", "redis:6379"),
+		RedisPassword:       getEnv("REDIS_PASSWORD", ""),
+		RateLimit:           rl,
+		RateWindow:          rw,
+		SMTPServerIP:        os.Getenv("SMTP_SERVER_IP"),
+		SMTPHostname:        os.Getenv("SMTP_HOSTNAME"),
+		LinuxDOClientID:     os.Getenv("LINUXDO_CLIENT_ID"),
+		LinuxDOClientSecret: os.Getenv("LINUXDO_CLIENT_SECRET"),
+		LinuxDORedirectURL:  os.Getenv("LINUXDO_REDIRECT_URL"),
 	}
 }
 

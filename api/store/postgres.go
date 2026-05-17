@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math/big"
 	"net"
@@ -28,9 +29,9 @@ func New(ctx context.Context, dsn string) (*Store, error) {
 		return nil, fmt.Errorf("parse dsn: %w", err)
 	}
 
-// 连接池：不限并发，由 PgBouncer 统一管控实际 PG 连接数
-        cfg.MaxConns = 500
-        cfg.MinConns = 20
+	// 连接池：不限并发，由 PgBouncer 统一管控实际 PG 连接数
+	cfg.MaxConns = 500
+	cfg.MinConns = 20
 	cfg.MaxConnLifetime = 30 * time.Minute
 	cfg.MaxConnIdleTime = 5 * time.Minute
 	cfg.HealthCheckPeriod = 30 * time.Second
@@ -62,13 +63,44 @@ func (s *Store) Close() {
 func (s *Store) GetAccountByAPIKey(ctx context.Context, apiKey string) (*model.Account, error) {
 	var a model.Account
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, username, api_key, is_admin, is_active, created_at, updated_at
+		`SELECT id, username, api_key, COALESCE(linuxdo_id, ''), is_admin, is_active, created_at, updated_at
 		 FROM accounts WHERE api_key = $1 AND is_active = TRUE`, apiKey,
-	).Scan(&a.ID, &a.Username, &a.APIKey, &a.IsAdmin, &a.IsActive, &a.CreatedAt, &a.UpdatedAt)
+	).Scan(&a.ID, &a.Username, &a.APIKey, &a.LinuxDOID, &a.IsAdmin, &a.IsActive, &a.CreatedAt, &a.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
 	return &a, nil
+}
+
+func (s *Store) GetOrCreateLinuxDOAccount(ctx context.Context, linuxDOID, username string) (*model.Account, error) {
+	var a model.Account
+	err := s.pool.QueryRow(ctx,
+		`SELECT id, username, api_key, COALESCE(linuxdo_id, ''), is_admin, is_active, created_at, updated_at
+		 FROM accounts WHERE linuxdo_id = $1 AND is_active = TRUE`, linuxDOID,
+	).Scan(&a.ID, &a.Username, &a.APIKey, &a.LinuxDOID, &a.IsAdmin, &a.IsActive, &a.CreatedAt, &a.UpdatedAt)
+	if err == nil {
+		return &a, nil
+	}
+	if err != pgx.ErrNoRows {
+		return nil, err
+	}
+
+	apiKey := generateAPIKey()
+	for i := 0; i < 5; i++ {
+		name := username
+		if i > 0 {
+			name = fmt.Sprintf("%s_%d", username, i+1)
+		}
+		err = s.pool.QueryRow(ctx,
+			`INSERT INTO accounts (username, api_key, linuxdo_id) VALUES ($1, $2, $3)
+			 RETURNING id, username, api_key, COALESCE(linuxdo_id, ''), is_admin, is_active, created_at, updated_at`,
+			name, apiKey, linuxDOID,
+		).Scan(&a.ID, &a.Username, &a.APIKey, &a.LinuxDOID, &a.IsAdmin, &a.IsActive, &a.CreatedAt, &a.UpdatedAt)
+		if err == nil {
+			return &a, nil
+		}
+	}
+	return nil, errors.New("failed to create Linux DO account")
 }
 
 func (s *Store) CreateAccount(ctx context.Context, username string) (*model.Account, error) {
@@ -76,9 +108,9 @@ func (s *Store) CreateAccount(ctx context.Context, username string) (*model.Acco
 	var a model.Account
 	err := s.pool.QueryRow(ctx,
 		`INSERT INTO accounts (username, api_key) VALUES ($1, $2)
-		 RETURNING id, username, api_key, is_admin, is_active, created_at, updated_at`,
+		 RETURNING id, username, api_key, COALESCE(linuxdo_id, ''), is_admin, is_active, created_at, updated_at`,
 		username, apiKey,
-	).Scan(&a.ID, &a.Username, &a.APIKey, &a.IsAdmin, &a.IsActive, &a.CreatedAt, &a.UpdatedAt)
+	).Scan(&a.ID, &a.Username, &a.APIKey, &a.LinuxDOID, &a.IsAdmin, &a.IsActive, &a.CreatedAt, &a.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +122,7 @@ func (s *Store) DeleteAccount(ctx context.Context, accountID uuid.UUID) error {
 	return err
 }
 
-func (s *Store) ListAccounts(ctx context.Context, page, size int) ([]model.Account, int, error) {
+func (s *Store) ListAccounts(ctx context.Context, page, size int) ([]model.AccountWithStats, int, error) {
 	var total int
 	err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM accounts`).Scan(&total)
 	if err != nil {
@@ -98,8 +130,17 @@ func (s *Store) ListAccounts(ctx context.Context, page, size int) ([]model.Accou
 	}
 
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, username, api_key, is_admin, is_active, created_at, updated_at
-		 FROM accounts ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
+		`SELECT
+			a.id, a.username, a.api_key, COALESCE(a.linuxdo_id, ''), a.is_admin, a.is_active, a.created_at, a.updated_at,
+			COUNT(DISTINCT m.id)::INT AS mailbox_count,
+			COUNT(DISTINCT m.id) FILTER (WHERE m.expires_at > NOW())::INT AS active_mailbox_count,
+			COUNT(e.id)::INT AS current_email_count,
+			COALESCE(SUM(m.received_email_count), 0)::INT AS received_email_count
+		 FROM accounts a
+		 LEFT JOIN mailboxes m ON m.account_id = a.id
+		 LEFT JOIN emails e ON e.mailbox_id = m.id
+		 GROUP BY a.id
+		 ORDER BY a.created_at DESC LIMIT $1 OFFSET $2`,
 		size, (page-1)*size,
 	)
 	if err != nil {
@@ -107,7 +148,7 @@ func (s *Store) ListAccounts(ctx context.Context, page, size int) ([]model.Accou
 	}
 	defer rows.Close()
 
-	accounts, err := pgx.CollectRows(rows, pgx.RowToStructByPos[model.Account])
+	accounts, err := pgx.CollectRows(rows, pgx.RowToStructByPos[model.AccountWithStats])
 	if err != nil {
 		return nil, 0, err
 	}
@@ -272,7 +313,7 @@ func (s *Store) GetStats(ctx context.Context) (*model.Stats, error) {
 		SELECT
 		  (SELECT COUNT(*) FROM mailboxes)                         AS total_mailboxes,
 		  (SELECT COUNT(*) FROM mailboxes WHERE expires_at > NOW()) AS active_mailboxes,
-		  (SELECT COUNT(*) FROM emails)                            AS total_emails,
+		  COALESCE((SELECT NULLIF(value, '')::INT FROM app_settings WHERE key = 'total_emails_received'), (SELECT COUNT(*) FROM emails)) AS total_emails,
 		  (SELECT COUNT(*) FROM domains WHERE is_active = TRUE)    AS active_domains,
 		  (SELECT COUNT(*) FROM domains WHERE status = 'pending')  AS pending_domains,
 		  (SELECT COUNT(*) FROM accounts WHERE is_active = TRUE)   AS total_accounts
@@ -408,14 +449,35 @@ func CheckDomainMX(domain, serverIP string) (matched bool, mxHosts []string, sta
 // ==================== Email ====================
 
 func (s *Store) InsertEmail(ctx context.Context, mailboxID uuid.UUID, sender, subject, bodyText, bodyHTML, raw string) (*model.Email, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
 	var e model.Email
-	err := s.pool.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		`INSERT INTO emails (mailbox_id, sender, subject, body_text, body_html, raw_message, size_bytes)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 RETURNING id, mailbox_id, sender, subject, body_text, body_html, raw_message, size_bytes, received_at`,
 		mailboxID, sender, subject, bodyText, bodyHTML, raw, len(raw),
 	).Scan(&e.ID, &e.MailboxID, &e.Sender, &e.Subject, &e.BodyText, &e.BodyHTML, &e.RawMessage, &e.SizeBytes, &e.ReceivedAt)
 	if err != nil {
+		return nil, err
+	}
+	_, err = tx.Exec(ctx, `
+		INSERT INTO app_settings (key, value) VALUES ('total_emails_received', '1')
+		ON CONFLICT (key) DO UPDATE
+		SET value = ((COALESCE(NULLIF(app_settings.value, ''), '0')::INT + 1)::TEXT), updated_at = NOW()
+	`)
+	if err != nil {
+		return nil, err
+	}
+	_, err = tx.Exec(ctx, `UPDATE mailboxes SET received_email_count = received_email_count + 1 WHERE id = $1`, mailboxID)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
 	return &e, nil

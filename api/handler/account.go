@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"tempmail/middleware"
 	"tempmail/store"
@@ -16,6 +17,37 @@ type AccountHandler struct {
 
 func NewAccountHandler(s *store.Store) *AccountHandler {
 	return &AccountHandler{store: s}
+}
+
+// POST /public/key-login - API Key 登录入口，可由后台开关关闭。
+func (h *AccountHandler) KeyLogin(c *gin.Context) {
+	keyLogin, err := h.store.GetSetting(c.Request.Context(), "key_login_enabled")
+
+	var req struct {
+		APIKey string `json:"api_key" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	account, err := h.store.GetAccountByAPIKey(c.Request.Context(), strings.TrimSpace(req.APIKey))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid api_key"})
+		return
+	}
+	if keyLogin == "false" && !account.IsAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "API Key login is disabled"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"api_key":    account.APIKey,
+		"id":         account.ID,
+		"username":   account.Username,
+		"is_admin":   account.IsAdmin,
+		"created_at": account.CreatedAt,
+	})
 }
 
 // POST /api/admin/accounts - 创建账号（管理员）
@@ -45,8 +77,12 @@ func (h *AccountHandler) Create(c *gin.Context) {
 func (h *AccountHandler) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
-	if page < 1 { page = 1 }
-	if size < 1 || size > 100 { size = 20 }
+	if page < 1 {
+		page = 1
+	}
+	if size < 1 || size > 100 {
+		size = 20
+	}
 
 	accounts, total, err := h.store.ListAccounts(c.Request.Context(), page, size)
 	if err != nil {
