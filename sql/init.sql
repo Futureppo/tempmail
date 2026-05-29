@@ -32,6 +32,8 @@ CREATE TABLE domains (
     domain        VARCHAR(255) NOT NULL UNIQUE,
     domain_type   VARCHAR(16)  NOT NULL DEFAULT 'exact',  -- exact / wildcard
     base_domain   VARCHAR(255) NOT NULL DEFAULT '',
+    supports_single   BOOLEAN  NOT NULL DEFAULT TRUE,
+    supports_wildcard BOOLEAN  NOT NULL DEFAULT FALSE,
     is_active     BOOLEAN      NOT NULL DEFAULT TRUE,
     status        VARCHAR(16)  NOT NULL DEFAULT 'active',  -- active / pending / disabled
     mx_checked_at TIMESTAMPTZ,                             -- 最近一次 MX 检测时间
@@ -43,6 +45,8 @@ CREATE TABLE domains (
 CREATE INDEX idx_domains_active ON domains (is_active) WHERE is_active = TRUE;
 CREATE INDEX idx_domains_status ON domains (status) WHERE status = 'pending';
 CREATE INDEX idx_domains_active_type ON domains (domain_type) WHERE is_active = TRUE;
+CREATE INDEX idx_domains_active_single ON domains (supports_single) WHERE is_active = TRUE AND supports_single = TRUE;
+CREATE INDEX idx_domains_active_wildcard ON domains (supports_wildcard) WHERE is_active = TRUE AND supports_wildcard = TRUE;
 CREATE INDEX idx_domains_base_domain ON domains (base_domain);
 
 -- ============================================================

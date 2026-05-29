@@ -58,25 +58,18 @@ func mailHostForDomain(domain string) string {
 }
 
 func dnsRecordsForDomain(domain, serverIP, hostname string) []gin.H {
-	_, domainType, baseDomain := store.NormalizeDomain(domain)
+	_, _, baseDomain := store.NormalizeDomain(domain)
 	mxTarget := hostname
 	if mxTarget == "" {
 		mxTarget = mailHostForDomain(domain)
 	}
 
 	records := make([]gin.H, 0, 4)
-	if domainType == store.DomainTypeWildcard {
-		records = append(records,
-			gin.H{"type": "MX", "host": baseDomain, "value": mxTarget, "priority": 10, "description": "基础域名收信，如 user@" + baseDomain},
-			gin.H{"type": "MX", "host": "*." + baseDomain, "value": mxTarget, "priority": 10, "description": "通配子域收信，如 user@a.b." + baseDomain},
-			gin.H{"type": "TXT", "host": baseDomain, "value": fmt.Sprintf("v=spf1 ip4:%s ~all", serverIP), "description": "SPF 记录（可选）"},
-		)
-	} else {
-		records = append(records,
-			gin.H{"type": "MX", "host": baseDomain, "value": mxTarget, "priority": 10, "description": "邮件交换记录，指向本服务器"},
-			gin.H{"type": "TXT", "host": baseDomain, "value": fmt.Sprintf("v=spf1 ip4:%s ~all", serverIP), "description": "SPF 记录（可选）"},
-		)
-	}
+	records = append(records,
+		gin.H{"type": "MX", "host": baseDomain, "value": mxTarget, "priority": 10, "description": "单域名收信，如 user@" + baseDomain},
+		gin.H{"type": "MX", "host": "*." + baseDomain, "value": mxTarget, "priority": 10, "description": "通配子域收信，如 user@a.b." + baseDomain},
+		gin.H{"type": "TXT", "host": baseDomain, "value": fmt.Sprintf("v=spf1 ip4:%s ~all", serverIP), "description": "SPF 记录（可选）"},
+	)
 	if hostname == "" {
 		records = append(records, gin.H{"type": "A", "host": mxTarget, "value": serverIP, "description": "邮件服务器 A 记录"})
 	}
@@ -194,6 +187,7 @@ func (h *DomainHandler) MXImport(c *gin.Context) {
 
 	// DNS MX 检测
 	matched, mxDetails, mxStatus := store.CheckDomainMXDetails(req.Domain, serverIP)
+	supportsSingle, supportsWildcard := store.DomainCapabilitiesFromMX(mxDetails)
 
 	if !matched && !req.Force {
 		dnsHint := dnsRecordsForDomain(req.Domain, serverIP, hostname)
@@ -209,7 +203,7 @@ func (h *DomainHandler) MXImport(c *gin.Context) {
 	}
 
 	// 导入到域名池
-	domain, err := h.store.AddDomain(c.Request.Context(), req.Domain)
+	domain, err := h.store.AddDomainWithCapabilities(c.Request.Context(), req.Domain, supportsSingle, supportsWildcard)
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") {
 			c.JSON(http.StatusConflict, gin.H{"error": "域名已存在"})
@@ -247,14 +241,16 @@ func (h *DomainHandler) MXRegister(c *gin.Context) {
 
 	// 先尝试立即检测；通过则直接激活
 	matched, mxDetails, mxStatus := store.CheckDomainMXDetails(req.Domain, serverIP)
+	supportsSingle, supportsWildcard := store.DomainCapabilitiesFromMX(mxDetails)
 	if matched {
-		domain, err := h.store.AddDomain(c.Request.Context(), req.Domain)
+		domain, err := h.store.AddDomainWithCapabilities(c.Request.Context(), req.Domain, supportsSingle, supportsWildcard)
 		if err != nil {
 			if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") {
 				// 已存在则直接返回
 				domains, _ := h.store.ListDomains(c.Request.Context())
+				canonicalDomain, _, _ := store.NormalizeDomain(req.Domain)
 				for _, d := range domains {
-					if d.Domain == req.Domain {
+					if d.Domain == canonicalDomain {
 						c.JSON(http.StatusOK, gin.H{
 							"domain":       d,
 							"status":       d.Status,
@@ -322,12 +318,45 @@ func (h *DomainHandler) GetStatus(c *gin.Context) {
 	_, mxDetails, mxStatus := store.CheckDomainMXDetails(domain.Domain, serverIP)
 
 	c.JSON(http.StatusOK, gin.H{
-		"id":            domain.ID,
-		"domain":        domain.Domain,
-		"status":        domain.Status,
-		"is_active":     domain.IsActive,
-		"mx_checked_at": domain.MxCheckedAt,
-		"mx_status":     mxStatus,
-		"mx_details":    mxDetails,
+		"id":                domain.ID,
+		"domain":            domain.Domain,
+		"supports_single":   domain.SupportsSingle,
+		"supports_wildcard": domain.SupportsWildcard,
+		"status":            domain.Status,
+		"is_active":         domain.IsActive,
+		"mx_checked_at":     domain.MxCheckedAt,
+		"mx_status":         mxStatus,
+		"mx_details":        mxDetails,
 	})
+}
+
+// POST /api/admin/domains/refresh-mx - 手动刷新所有域名的单域名/通配子域 MX 能力
+func (h *DomainHandler) RefreshMX(c *gin.Context) {
+	domains, err := h.store.ListDomains(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	serverIP := h.getServerIP(c.Request.Context())
+	results := make([]gin.H, 0, len(domains))
+	for _, domain := range domains {
+		_, mxDetails, mxStatus := store.CheckDomainMXDetails(domain.Domain, serverIP)
+		supportsSingle, supportsWildcard := store.DomainCapabilitiesFromMX(mxDetails)
+		if err := h.store.UpdateDomainCapabilities(c.Request.Context(), domain.ID, supportsSingle, supportsWildcard); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error(), "domain": domain.Domain})
+			return
+		}
+		results = append(results, gin.H{
+			"id":                domain.ID,
+			"domain":            domain.Domain,
+			"supports_single":   supportsSingle,
+			"supports_wildcard": supportsWildcard,
+			"is_active":         supportsSingle || supportsWildcard,
+			"mx_status":         mxStatus,
+			"mx_details":        mxDetails,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"domains": results})
 }

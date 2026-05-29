@@ -70,7 +70,7 @@ def exact_pattern(domain):
 
 def wildcard_pattern(base_domain):
     labels = re.escape(base_domain)
-    return rf"([^.]+(\.[^.]+)*\.)?{labels}"
+    return rf"[^.]+(\.[^.]+)*\.{labels}"
 
 def is_wildcard_record(record, domain):
     domain_type = str(record.get("domain_type", "")).strip().lower()
@@ -90,6 +90,11 @@ def is_active_record(record):
     if isinstance(active, str):
         return active.strip().lower() not in {"", "0", "false", "no", "off"}
     return bool(active)
+
+def truthy(value):
+    if isinstance(value, str):
+        return value.strip().lower() not in {"", "0", "false", "no", "off"}
+    return bool(value)
 
 try:
     data = json.load(sys.stdin)
@@ -114,8 +119,6 @@ for record in records:
 
     domain = normalize_domain(record.get("domain"))
     base_domain = normalize_domain(record.get("base_domain"))
-    wildcard = is_wildcard_record(record, domain)
-
     if domain.startswith("*."):
         base_domain = normalize_domain(domain[2:])
     elif not base_domain:
@@ -124,11 +127,23 @@ for record in records:
     if not base_domain:
         continue
 
-    pattern = wildcard_pattern(base_domain) if wildcard else exact_pattern(base_domain)
-    line = regexp_line(pattern)
-    if line not in seen:
-        seen.add(line)
-        lines.append(line)
+    supports_single = truthy(record.get("supports_single"))
+    supports_wildcard = truthy(record.get("supports_wildcard"))
+    if not supports_single and not supports_wildcard:
+        wildcard = is_wildcard_record(record, domain)
+        supports_single = not wildcard
+        supports_wildcard = wildcard
+
+    for pattern in (
+        exact_pattern(base_domain) if supports_single else "",
+        wildcard_pattern(base_domain) if supports_wildcard else "",
+    ):
+        if not pattern:
+            continue
+        line = regexp_line(pattern)
+        if line not in seen:
+            seen.add(line)
+            lines.append(line)
 
 print("\n".join(lines))
 ' > /etc/postfix/virtual_domains.new

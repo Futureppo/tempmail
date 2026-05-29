@@ -68,7 +68,7 @@ func (h *MailboxHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// 确定域名：指定 or 随机。single 使用 exact，multi 使用 wildcard/base。
+	// 确定域名：指定 or 随机。single 使用单域名能力，multi 使用通配子域能力。
 	var domainRecord *model.Domain
 	if req.DomainID > 0 {
 		found, err := h.store.GetDomainByID(c.Request.Context(), req.DomainID)
@@ -78,75 +78,79 @@ func (h *MailboxHandler) Create(c *gin.Context) {
 		}
 		if req.Mode == "" {
 			mode = "single"
-			if found.DomainType == store.DomainTypeWildcard {
+			if !found.SupportsSingle && found.SupportsWildcard {
 				mode = "multi"
 			}
 		}
-		if mode == "multi" && found.DomainType != store.DomainTypeWildcard {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "multi mode requires a wildcard domain"})
+		if mode == "single" && !found.SupportsSingle {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "single mode requires a domain with single-domain MX support"})
+			return
+		}
+		if mode == "multi" && !found.SupportsWildcard {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "multi mode requires a domain with wildcard MX support"})
 			return
 		}
 		domainRecord = found
 	} else if d := strings.TrimSpace(strings.ToLower(req.Domain)); d != "" {
-		if mode == "multi" && !strings.HasPrefix(d, "*.") {
-			d = "*." + d
-		}
 		found, err := h.store.GetDomainByName(c.Request.Context(), d)
-		if err != nil && mode == "single" && !strings.HasPrefix(d, "*.") {
-			found, err = h.store.GetDomainByName(c.Request.Context(), "*."+d)
-		}
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "domain not found or not active: " + d})
 			return
 		}
-		if mode == "multi" && found.DomainType != store.DomainTypeWildcard {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "multi mode requires a wildcard domain"})
+		if req.Mode == "" {
+			mode = "single"
+			if !found.SupportsSingle && found.SupportsWildcard {
+				mode = "multi"
+			}
+		}
+		if mode == "single" && !found.SupportsSingle {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "single mode requires a domain with single-domain MX support"})
+			return
+		}
+		if mode == "multi" && !found.SupportsWildcard {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "multi mode requires a domain with wildcard MX support"})
 			return
 		}
 		domainRecord = found
 	} else {
-		domainType := store.DomainTypeExact
+		capability := store.DomainCapabilitySingle
 		if mode == "multi" {
-			domainType = store.DomainTypeWildcard
+			capability = store.DomainCapabilityWildcard
 		}
-		found, err := h.store.GetRandomActiveDomainByType(c.Request.Context(), domainType)
+		found, err := h.store.GetRandomActiveDomainByCapability(c.Request.Context(), capability)
 		if err != nil && randomMode {
 			if mode == "multi" {
-				found, err = h.store.GetRandomActiveDomainByType(c.Request.Context(), store.DomainTypeExact)
+				found, err = h.store.GetRandomActiveDomainByCapability(c.Request.Context(), store.DomainCapabilitySingle)
 				if err == nil {
 					mode = "single"
-					domainType = store.DomainTypeExact
+					capability = store.DomainCapabilitySingle
 				}
 			} else {
-				found, err = h.store.GetRandomActiveDomainByType(c.Request.Context(), store.DomainTypeWildcard)
+				found, err = h.store.GetRandomActiveDomainByCapability(c.Request.Context(), store.DomainCapabilityWildcard)
 				if err == nil {
 					mode = "multi"
-					domainType = store.DomainTypeWildcard
+					capability = store.DomainCapabilityWildcard
 				}
 			}
 		}
 		if err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("no active %s domains available", domainType)})
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("no active %s domains available", capability)})
 			return
 		}
 		domainRecord = found
 	}
 
-	domainName := domainRecord.Domain
-	if domainRecord.DomainType == store.DomainTypeWildcard {
-		if mode == "multi" {
-			if customSubdomain != "" {
-				customDomain, err := store.JoinCustomSubdomain(customSubdomain, domainRecord.BaseDomain)
-				if err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				domainName = customDomain
-			} else {
-				domainName = store.GenerateMultiLevelDomain(domainRecord.BaseDomain)
+	domainName := domainRecord.BaseDomain
+	if mode == "multi" {
+		if customSubdomain != "" {
+			customDomain, err := store.JoinCustomSubdomain(customSubdomain, domainRecord.BaseDomain)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
 			}
+			domainName = customDomain
 		} else {
-			domainName = domainRecord.BaseDomain
+			domainName = store.GenerateMultiLevelDomain(domainRecord.BaseDomain)
 		}
 	}
 	fullAddress := fmt.Sprintf("%s@%s", address, domainName)

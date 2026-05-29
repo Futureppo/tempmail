@@ -28,14 +28,16 @@ type AccountWithStats struct {
 }
 
 type Domain struct {
-	ID          int        `json:"id"`
-	Domain      string     `json:"domain"`
-	DomainType  string     `json:"domain_type"` // exact | wildcard
-	BaseDomain  string     `json:"base_domain"`
-	IsActive    bool       `json:"is_active"`
-	Status      string     `json:"status"` // active | pending | disabled
-	CreatedAt   time.Time  `json:"created_at"`
-	MxCheckedAt *time.Time `json:"mx_checked_at,omitempty"`
+	ID               int        `json:"id"`
+	Domain           string     `json:"domain"`
+	DomainType       string     `json:"domain_type"` // exact | wildcard
+	BaseDomain       string     `json:"base_domain"`
+	SupportsSingle   bool       `json:"supports_single"`
+	SupportsWildcard bool       `json:"supports_wildcard"`
+	IsActive         bool       `json:"is_active"`
+	Status           string     `json:"status"` // active | pending | disabled
+	CreatedAt        time.Time  `json:"created_at"`
+	MxCheckedAt      *time.Time `json:"mx_checked_at,omitempty"`
 }
 
 type Stats struct {

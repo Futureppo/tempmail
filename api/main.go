@@ -125,10 +125,11 @@ func main() {
 			admin.DELETE("/accounts/:id", accountH.Delete)
 
 			admin.POST("/domains", domainH.Add)
-			admin.DELETE("/domains/:id", domainH.Delete)
-			admin.PUT("/domains/:id/toggle", domainH.Toggle)
 			admin.POST("/domains/mx-import", domainH.MXImport)
 			admin.POST("/domains/mx-register", domainH.MXRegister)
+			admin.POST("/domains/refresh-mx", domainH.RefreshMX)
+			admin.DELETE("/domains/:id", domainH.Delete)
+			admin.PUT("/domains/:id/toggle", domainH.Toggle)
 			admin.GET("/domains/:id/status", domainH.GetStatus)
 
 			// 系统设置管理
@@ -244,6 +245,32 @@ func main() {
 		log.Println("[OK] MX domain verifier started (pending check=30s, active re-check=6h)")
 		reCheckTicker := time.NewTicker(6 * time.Hour)
 		defer reCheckTicker.Stop()
+		refreshActiveDomains := func() {
+			activeDomains, err := db.GetActiveDomains(context.Background())
+			if err != nil {
+				log.Printf("[mx-recheck] list active error: %v", err)
+				return
+			}
+			serverIP := cfg.SMTPServerIP
+			if serverIP == "" {
+				serverIP, _ = db.GetSetting(context.Background(), "smtp_server_ip")
+			}
+			log.Printf("[mx-recheck] checking %d active domains", len(activeDomains))
+			for _, d := range activeDomains {
+				matched, details, mxStatus := store.CheckDomainMXDetails(d.Domain, serverIP)
+				supportsSingle, supportsWildcard := store.DomainCapabilitiesFromMX(details)
+				if err := db.UpdateDomainCapabilities(context.Background(), d.ID, supportsSingle, supportsWildcard); err != nil {
+					log.Printf("[mx-recheck] update %s capabilities error: %v", d.Domain, err)
+					continue
+				}
+				if !matched {
+					log.Printf("[mx-recheck] [WARN] %s MX no longer valid (%s), domain disabled", d.Domain, mxStatus)
+				} else {
+					log.Printf("[mx-recheck] %s capabilities refreshed, single=%v wildcard=%v", d.Domain, supportsSingle, supportsWildcard)
+				}
+			}
+		}
+		go refreshActiveDomains()
 		for {
 			select {
 			case <-ticker.C:
@@ -261,14 +288,14 @@ func main() {
 					serverIP, _ = db.GetSetting(context.Background(), "smtp_server_ip")
 				}
 				for _, d := range pendingDomains {
-					matched, _, mxStatus := store.CheckDomainMX(d.Domain, serverIP)
-					db.TouchDomainCheckTime(context.Background(), d.ID)
+					matched, details, mxStatus := store.CheckDomainMXDetails(d.Domain, serverIP)
+					supportsSingle, supportsWildcard := store.DomainCapabilitiesFromMX(details)
+					if err := db.UpdateDomainCapabilities(context.Background(), d.ID, supportsSingle, supportsWildcard); err != nil {
+						log.Printf("[mx-verifier] update %s capabilities error: %v", d.Domain, err)
+						continue
+					}
 					if matched {
-						if err := db.PromoteDomainToActive(context.Background(), d.ID); err != nil {
-							log.Printf("[mx-verifier] promote %s error: %v", d.Domain, err)
-						} else {
-							log.Printf("[mx-verifier] [OK] %s MX verified, domain activated", d.Domain)
-						}
+						log.Printf("[mx-verifier] [OK] %s MX verified, single=%v wildcard=%v", d.Domain, supportsSingle, supportsWildcard)
 					} else {
 						log.Printf("[mx-verifier] waiting: %s — %s", d.Domain, mxStatus)
 					}
@@ -276,27 +303,7 @@ func main() {
 
 			case <-reCheckTicker.C:
 				// 每 6 小时重新检测所有已激活域名，MX 失效则自动停用
-				activeDomains, err := db.GetActiveDomains(context.Background())
-				if err != nil {
-					log.Printf("[mx-recheck] list active error: %v", err)
-					continue
-				}
-				serverIP := cfg.SMTPServerIP
-				if serverIP == "" {
-					serverIP, _ = db.GetSetting(context.Background(), "smtp_server_ip")
-				}
-				log.Printf("[mx-recheck] checking %d active domains", len(activeDomains))
-				for _, d := range activeDomains {
-					matched, _, mxStatus := store.CheckDomainMX(d.Domain, serverIP)
-					db.TouchDomainCheckTime(context.Background(), d.ID)
-					if !matched {
-						if err := db.DisableDomainMX(context.Background(), d.ID); err != nil {
-							log.Printf("[mx-recheck] disable %s error: %v", d.Domain, err)
-						} else {
-							log.Printf("[mx-recheck] [WARN] %s MX no longer valid (%s), domain disabled", d.Domain, mxStatus)
-						}
-					}
-				}
+				refreshActiveDomains()
 			}
 		}
 	}()

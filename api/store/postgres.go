@@ -68,6 +68,9 @@ type Store struct {
 const (
 	DomainTypeExact    = "exact"
 	DomainTypeWildcard = "wildcard"
+
+	DomainCapabilitySingle   = "single"
+	DomainCapabilityWildcard = "wildcard"
 )
 
 var domainLabelPattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
@@ -257,13 +260,50 @@ func (s *Store) GetAdminAPIKey(ctx context.Context) (string, error) {
 
 func (s *Store) AddDomain(ctx context.Context, domain string) (*model.Domain, error) {
 	canonicalDomain, domainType, baseDomain := NormalizeDomain(domain)
+	supportsSingle := domainType == DomainTypeExact
+	supportsWildcard := domainType == DomainTypeWildcard
 	var d model.Domain
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO domains (domain, domain_type, base_domain, is_active, status)
-		 VALUES ($1, $2, $3, TRUE, 'active')
-		 RETURNING id, domain, domain_type, base_domain, is_active, status, created_at, mx_checked_at`,
-		canonicalDomain, domainType, baseDomain,
-	).Scan(&d.ID, &d.Domain, &d.DomainType, &d.BaseDomain, &d.IsActive, &d.Status, &d.CreatedAt, &d.MxCheckedAt)
+		`INSERT INTO domains (domain, domain_type, base_domain, supports_single, supports_wildcard, is_active, status)
+		 VALUES ($1, $2, $3, $4, $5, TRUE, 'active')
+		 RETURNING id, domain, domain_type, base_domain, supports_single, supports_wildcard, is_active, status, created_at, mx_checked_at`,
+		canonicalDomain, domainType, baseDomain, supportsSingle, supportsWildcard,
+	).Scan(&d.ID, &d.Domain, &d.DomainType, &d.BaseDomain, &d.SupportsSingle, &d.SupportsWildcard, &d.IsActive, &d.Status, &d.CreatedAt, &d.MxCheckedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &d, nil
+}
+
+func (s *Store) AddDomainWithCapabilities(ctx context.Context, domain string, supportsSingle, supportsWildcard bool) (*model.Domain, error) {
+	_, domainType, baseDomain := NormalizeDomain(domain)
+	canonicalDomain := baseDomain
+	if existing, err := s.GetDomainByName(ctx, baseDomain); err == nil {
+		canonicalDomain = existing.Domain
+	}
+	if supportsWildcard {
+		domainType = DomainTypeWildcard
+	}
+	active := supportsSingle || supportsWildcard
+	status := "pending"
+	if active {
+		status = "active"
+	}
+	var d model.Domain
+	err := s.pool.QueryRow(ctx,
+		`INSERT INTO domains (domain, domain_type, base_domain, supports_single, supports_wildcard, is_active, status, mx_checked_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+		 ON CONFLICT (domain) DO UPDATE
+		   SET domain_type = EXCLUDED.domain_type,
+		       base_domain = EXCLUDED.base_domain,
+		       supports_single = EXCLUDED.supports_single,
+		       supports_wildcard = EXCLUDED.supports_wildcard,
+		       is_active = EXCLUDED.is_active,
+		       status = EXCLUDED.status,
+		       mx_checked_at = NOW()
+		 RETURNING id, domain, domain_type, base_domain, supports_single, supports_wildcard, is_active, status, created_at, mx_checked_at`,
+		canonicalDomain, domainType, baseDomain, supportsSingle, supportsWildcard, active, status,
+	).Scan(&d.ID, &d.Domain, &d.DomainType, &d.BaseDomain, &d.SupportsSingle, &d.SupportsWildcard, &d.IsActive, &d.Status, &d.CreatedAt, &d.MxCheckedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -275,16 +315,16 @@ func (s *Store) AddDomainPending(ctx context.Context, domain string) (*model.Dom
 	canonicalDomain, domainType, baseDomain := NormalizeDomain(domain)
 	var d model.Domain
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO domains (domain, domain_type, base_domain, is_active, status)
-		 VALUES ($1, $2, $3, FALSE, 'pending')
+		`INSERT INTO domains (domain, domain_type, base_domain, supports_single, supports_wildcard, is_active, status)
+		 VALUES ($1, $2, $3, FALSE, FALSE, FALSE, 'pending')
 		 ON CONFLICT (domain) DO UPDATE
-		   SET status = CASE WHEN domains.status = 'active' THEN 'active' ELSE 'pending' END,
-		       is_active = CASE WHEN domains.status = 'active' THEN TRUE ELSE FALSE END,
+		   SET status = CASE WHEN domains.is_active THEN 'active' ELSE 'pending' END,
+		       is_active = domains.is_active,
 		       domain_type = EXCLUDED.domain_type,
 		       base_domain = EXCLUDED.base_domain
-		 RETURNING id, domain, domain_type, base_domain, is_active, status, created_at, mx_checked_at`,
+		 RETURNING id, domain, domain_type, base_domain, supports_single, supports_wildcard, is_active, status, created_at, mx_checked_at`,
 		canonicalDomain, domainType, baseDomain,
-	).Scan(&d.ID, &d.Domain, &d.DomainType, &d.BaseDomain, &d.IsActive, &d.Status, &d.CreatedAt, &d.MxCheckedAt)
+	).Scan(&d.ID, &d.Domain, &d.DomainType, &d.BaseDomain, &d.SupportsSingle, &d.SupportsWildcard, &d.IsActive, &d.Status, &d.CreatedAt, &d.MxCheckedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -293,7 +333,7 @@ func (s *Store) AddDomainPending(ctx context.Context, domain string) (*model.Dom
 
 func (s *Store) ListDomains(ctx context.Context) ([]model.Domain, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, domain, domain_type, base_domain, is_active, status, created_at, mx_checked_at
+		`SELECT id, domain, domain_type, base_domain, supports_single, supports_wildcard, is_active, status, created_at, mx_checked_at
 		 FROM domains ORDER BY created_at`)
 	if err != nil {
 		return nil, err
@@ -304,7 +344,7 @@ func (s *Store) ListDomains(ctx context.Context) ([]model.Domain, error) {
 
 func (s *Store) GetActiveDomains(ctx context.Context) ([]model.Domain, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, domain, domain_type, base_domain, is_active, status, created_at, mx_checked_at
+		`SELECT id, domain, domain_type, base_domain, supports_single, supports_wildcard, is_active, status, created_at, mx_checked_at
 		 FROM domains WHERE is_active = TRUE`)
 	if err != nil {
 		return nil, err
@@ -314,17 +354,40 @@ func (s *Store) GetActiveDomains(ctx context.Context) ([]model.Domain, error) {
 }
 
 func (s *Store) GetRandomActiveDomain(ctx context.Context) (*model.Domain, error) {
-	return s.GetRandomActiveDomainByType(ctx, DomainTypeExact)
+	return s.GetRandomActiveDomainByCapability(ctx, DomainCapabilitySingle)
 }
 
 func (s *Store) GetRandomActiveDomainByType(ctx context.Context, domainType string) (*model.Domain, error) {
+	if domainType == DomainTypeWildcard {
+		return s.GetRandomActiveDomainByCapability(ctx, DomainCapabilityWildcard)
+	}
+	if domainType == DomainTypeExact {
+		return s.GetRandomActiveDomainByCapability(ctx, DomainCapabilitySingle)
+	}
 	var d model.Domain
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, domain, domain_type, base_domain, is_active, status, created_at, mx_checked_at
+		`SELECT id, domain, domain_type, base_domain, supports_single, supports_wildcard, is_active, status, created_at, mx_checked_at
 		 FROM domains WHERE is_active = TRUE AND domain_type = $1
 		 ORDER BY RANDOM() LIMIT 1`,
 		domainType,
-	).Scan(&d.ID, &d.Domain, &d.DomainType, &d.BaseDomain, &d.IsActive, &d.Status, &d.CreatedAt, &d.MxCheckedAt)
+	).Scan(&d.ID, &d.Domain, &d.DomainType, &d.BaseDomain, &d.SupportsSingle, &d.SupportsWildcard, &d.IsActive, &d.Status, &d.CreatedAt, &d.MxCheckedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &d, nil
+}
+
+func (s *Store) GetRandomActiveDomainByCapability(ctx context.Context, capability string) (*model.Domain, error) {
+	condition := "supports_single = TRUE"
+	if capability == DomainCapabilityWildcard {
+		condition = "supports_wildcard = TRUE"
+	}
+	var d model.Domain
+	err := s.pool.QueryRow(ctx,
+		fmt.Sprintf(`SELECT id, domain, domain_type, base_domain, supports_single, supports_wildcard, is_active, status, created_at, mx_checked_at
+		 FROM domains WHERE is_active = TRUE AND %s
+		 ORDER BY RANDOM() LIMIT 1`, condition),
+	).Scan(&d.ID, &d.Domain, &d.DomainType, &d.BaseDomain, &d.SupportsSingle, &d.SupportsWildcard, &d.IsActive, &d.Status, &d.CreatedAt, &d.MxCheckedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -333,13 +396,16 @@ func (s *Store) GetRandomActiveDomainByType(ctx context.Context, domainType stri
 
 // GetDomainByName 按域名字符串查找活跃域名，供创建邮箱时指定域名使用
 func (s *Store) GetDomainByName(ctx context.Context, domain string) (*model.Domain, error) {
-	canonicalDomain, _, _ := NormalizeDomain(domain)
+	canonicalDomain, _, baseDomain := NormalizeDomain(domain)
 	var d model.Domain
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, domain, domain_type, base_domain, is_active, status, created_at, mx_checked_at
-		 FROM domains WHERE domain = $1 AND is_active = TRUE`,
-		canonicalDomain,
-	).Scan(&d.ID, &d.Domain, &d.DomainType, &d.BaseDomain, &d.IsActive, &d.Status, &d.CreatedAt, &d.MxCheckedAt)
+		`SELECT id, domain, domain_type, base_domain, supports_single, supports_wildcard, is_active, status, created_at, mx_checked_at
+		 FROM domains
+		 WHERE is_active = TRUE AND (domain = $1 OR base_domain = $2)
+		 ORDER BY CASE WHEN domain = $1 THEN 0 ELSE 1 END
+		 LIMIT 1`,
+		canonicalDomain, baseDomain,
+	).Scan(&d.ID, &d.Domain, &d.DomainType, &d.BaseDomain, &d.SupportsSingle, &d.SupportsWildcard, &d.IsActive, &d.Status, &d.CreatedAt, &d.MxCheckedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -349,10 +415,10 @@ func (s *Store) GetDomainByName(ctx context.Context, domain string) (*model.Doma
 func (s *Store) GetDomainByID(ctx context.Context, domainID int) (*model.Domain, error) {
 	var d model.Domain
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, domain, domain_type, base_domain, is_active, status, created_at, mx_checked_at
+		`SELECT id, domain, domain_type, base_domain, supports_single, supports_wildcard, is_active, status, created_at, mx_checked_at
 		 FROM domains WHERE id = $1`,
 		domainID,
-	).Scan(&d.ID, &d.Domain, &d.DomainType, &d.BaseDomain, &d.IsActive, &d.Status, &d.CreatedAt, &d.MxCheckedAt)
+	).Scan(&d.ID, &d.Domain, &d.DomainType, &d.BaseDomain, &d.SupportsSingle, &d.SupportsWildcard, &d.IsActive, &d.Status, &d.CreatedAt, &d.MxCheckedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -362,7 +428,7 @@ func (s *Store) GetDomainByID(ctx context.Context, domainID int) (*model.Domain,
 // ListPendingDomains 返回所有待验证域名
 func (s *Store) ListPendingDomains(ctx context.Context) ([]model.Domain, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, domain, domain_type, base_domain, is_active, status, created_at, mx_checked_at
+		`SELECT id, domain, domain_type, base_domain, supports_single, supports_wildcard, is_active, status, created_at, mx_checked_at
 		 FROM domains WHERE status = 'pending'
 		 ORDER BY created_at`)
 	if err != nil {
@@ -370,6 +436,29 @@ func (s *Store) ListPendingDomains(ctx context.Context) ([]model.Domain, error) 
 	}
 	defer rows.Close()
 	return pgx.CollectRows(rows, pgx.RowToStructByPos[model.Domain])
+}
+
+func (s *Store) UpdateDomainCapabilities(ctx context.Context, domainID int, supportsSingle, supportsWildcard bool) error {
+	active := supportsSingle || supportsWildcard
+	status := "pending"
+	if active {
+		status = "active"
+	}
+	domainType := DomainTypeExact
+	if supportsWildcard {
+		domainType = DomainTypeWildcard
+	}
+	_, err := s.pool.Exec(ctx,
+		`UPDATE domains
+		 SET supports_single = $1,
+		     supports_wildcard = $2,
+		     is_active = $3,
+		     status = $4,
+		     domain_type = $5,
+		     mx_checked_at = NOW()
+		 WHERE id = $6`,
+		supportsSingle, supportsWildcard, active, status, domainType, domainID)
+	return err
 }
 
 // PromoteDomainToActive 验证通过，激活域名
@@ -391,7 +480,13 @@ func (s *Store) TouchDomainCheckTime(ctx context.Context, domainID int) error {
 // DisableDomainMX MX检测失败，自动停用域名
 func (s *Store) DisableDomainMX(ctx context.Context, domainID int) error {
 	_, err := s.pool.Exec(ctx,
-		`UPDATE domains SET is_active = FALSE, status = 'disabled', mx_checked_at = NOW() WHERE id = $1`,
+		`UPDATE domains
+		 SET is_active = FALSE,
+		     status = 'disabled',
+		     supports_single = FALSE,
+		     supports_wildcard = FALSE,
+		     mx_checked_at = NOW()
+		 WHERE id = $1`,
 		domainID)
 	return err
 }
@@ -421,7 +516,13 @@ func (s *Store) ToggleDomain(ctx context.Context, domainID int, active bool) err
 		status = "active"
 	}
 	_, err := s.pool.Exec(ctx,
-		`UPDATE domains SET is_active = $1, status = $2 WHERE id = $3`, active, status, domainID)
+		`UPDATE domains
+		 SET is_active = $1,
+		     status = $2,
+		     supports_single = CASE WHEN $1 THEN supports_single ELSE FALSE END,
+		     supports_wildcard = CASE WHEN $1 THEN supports_wildcard ELSE FALSE END
+		 WHERE id = $3`,
+		active, status, domainID)
 	return err
 }
 
@@ -571,7 +672,7 @@ type MXCheckDetail struct {
 }
 
 // CheckDomainMX 检测域名MX记录是否指向指定服务器IP。
-// 通配域名会同时查询基础域名和一个代表性多级主机名，分别验证基础收信和 wildcard DNS/MX。
+// 域名激活只要求单域名或通配子域名其中一种能力可用。
 func CheckDomainMX(domain, serverIP string) (matched bool, mxHosts []string, status string) {
 	matched, details, status := CheckDomainMXDetails(domain, serverIP)
 	seen := make(map[string]bool)
@@ -587,26 +688,39 @@ func CheckDomainMX(domain, serverIP string) (matched bool, mxHosts []string, sta
 }
 
 func CheckDomainMXDetails(domain, serverIP string) (matched bool, details []MXCheckDetail, status string) {
-	_, domainType, baseDomain := NormalizeDomain(domain)
-	targets := []MXCheckDetail{{Kind: "exact", Name: baseDomain}}
-	if domainType == DomainTypeWildcard {
-		targets = []MXCheckDetail{
-			{Kind: "base", Name: baseDomain},
-			{Kind: "wildcard", Name: DomainMXLookupName(domain)},
-		}
+	_, _, baseDomain := NormalizeDomain(domain)
+	targets := []MXCheckDetail{
+		{Kind: "single", Name: baseDomain},
+		{Kind: "wildcard", Name: DomainMXLookupName("*." + baseDomain)},
 	}
 
-	allMatched := true
+	anyMatched := false
 	statuses := make([]string, 0, len(targets))
 	for _, target := range targets {
 		detail := checkMXName(target.Kind, target.Name, serverIP)
-		if !detail.Matched {
-			allMatched = false
+		if detail.Matched {
+			anyMatched = true
 		}
 		statuses = append(statuses, fmt.Sprintf("%s: %s", detail.Name, detail.Status))
 		details = append(details, detail)
 	}
-	return allMatched, details, strings.Join(statuses, "；")
+	return anyMatched, details, strings.Join(statuses, "；")
+}
+
+func DomainCapabilitiesFromMX(details []MXCheckDetail) (supportsSingle, supportsWildcard bool) {
+	for _, detail := range details {
+		switch detail.Kind {
+		case "single", "exact", "base":
+			if detail.Matched {
+				supportsSingle = true
+			}
+		case "wildcard":
+			if detail.Matched {
+				supportsWildcard = true
+			}
+		}
+	}
+	return supportsSingle, supportsWildcard
 }
 
 func checkMXName(kind, lookupName, serverIP string) MXCheckDetail {

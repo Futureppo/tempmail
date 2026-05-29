@@ -197,6 +197,7 @@ const api = {
     saveSettings: body => apiFetch(API_BASE + '/admin/settings', { method: 'PUT', body: JSON.stringify(body) }),
     mxImport:    body => apiFetch(API_BASE + '/admin/domains/mx-import', { method: 'POST', body: JSON.stringify(body) }),
     mxRegister:  body => apiFetch(API_BASE + '/admin/domains/mx-register', { method: 'POST', body: JSON.stringify(body) }),
+    refreshDomainMX: () => apiFetch(API_BASE + '/admin/domains/refresh-mx', { method: 'POST' }),
     getDomainStatus: id => apiFetch(API_BASE + '/admin/domains/' + id + '/status'),
   },
 };
@@ -227,22 +228,13 @@ function dnsHostDisplay(host) {
 function dnsRecordsForInput(domain, serverIP, serverHostname) {
   const d = normalizeDomainInput(domain) || 'example.com';
   const base = domainBaseName(d) || 'example.com';
-  const wildcard = isWildcardDomainInput(d);
   const ip = serverIP || '<服务器IP>';
   const mxTarget = serverHostname || 'mail.' + base;
-  const records = [];
-  if (wildcard) {
-    records.push(
-      { type: 'MX', host: base, value: mxTarget, priority: 10, note: '基础域名' },
-      { type: 'MX', host: '*.' + base, value: mxTarget, priority: 10, note: '通配子域' },
-      { type: 'TXT', host: base, value: `v=spf1 ip4:${ip} ~all`, priority: '—', note: 'SPF' },
-    );
-  } else {
-    records.push(
-      { type: 'MX', host: base, value: mxTarget, priority: 10, note: '域名收信' },
-      { type: 'TXT', host: base, value: `v=spf1 ip4:${ip} ~all`, priority: '—', note: 'SPF' },
-    );
-  }
+  const records = [
+    { type: 'MX', host: base, value: mxTarget, priority: 10, note: '单域名' },
+    { type: 'MX', host: '*.' + base, value: mxTarget, priority: 10, note: '通配子域' },
+    { type: 'TXT', host: base, value: `v=spf1 ip4:${ip} ~all`, priority: '—', note: 'SPF' },
+  ];
   if (!serverHostname) {
     records.push({ type: 'A', host: mxTarget, value: ip, priority: '—', note: '邮件服务器' });
   }
@@ -269,7 +261,7 @@ function mxDetailsHTML(details) {
           ${icon(d.matched ? 'check' : 'x')}
           <div>
             <div style="font-family:var(--font-mono);font-size:0.76rem">${escHtml(d.name || '')}</div>
-            <div style="color:var(--text-muted);font-size:0.76rem">${escHtml(d.kind === 'wildcard' ? '通配子域' : d.kind === 'base' ? '基础域名' : '域名')}：${escHtml(d.status || '')}</div>
+            <div style="color:var(--text-muted);font-size:0.76rem">${escHtml(d.kind === 'wildcard' ? '通配子域' : d.kind === 'single' || d.kind === 'base' ? '单域名' : '域名')}：${escHtml(d.status || '')}</div>
           </div>
         </div>
       `).join('')}
@@ -809,10 +801,11 @@ window.createMailbox = async function() {
   const overlay = el('div', 'modal-overlay');
 
   const domainOptions = activeDomains.map(d => {
-    const type = d.domain_type || 'exact';
-    const label = type === 'wildcard' ? (d.base_domain || String(d.domain || '').replace(/^\*\./, '')) : d.domain;
-    const suffix = type === 'wildcard' ? '（通配）' : '';
-    return `<option value="${d.id}" data-type="${escHtml(type)}" data-domain="${escHtml(d.domain)}" data-base="${escHtml(d.base_domain || label)}">${escHtml(label)}${suffix}</option>`;
+    const label = d.base_domain || String(d.domain || '').replace(/^\*\./, '');
+    const single = !!d.supports_single;
+    const wildcard = !!d.supports_wildcard;
+    const suffix = single && wildcard ? '（单域名/通配）' : wildcard ? '（通配）' : '（单域名）';
+    return `<option value="${d.id}" data-single="${single ? '1' : '0'}" data-wildcard="${wildcard ? '1' : '0'}" data-domain="${escHtml(d.domain)}" data-base="${escHtml(label)}">${escHtml(label)}${suffix}</option>`;
   }).join('');
 
   overlay.innerHTML = `
@@ -832,15 +825,15 @@ window.createMailbox = async function() {
             ${domainOptions}
           </select>
         </div>
-        <div class="form-hint" id="mb-domain-hint">选择通配域名时，默认使用基础域名创建邮箱。</div>
+        <div class="form-hint" id="mb-domain-hint">系统会按该域名当前可用的 MX 能力创建邮箱。</div>
       </div>
       <div class="form-group" id="mb-mode-group" style="display:none">
-        <label class="form-label">通配域名模式</label>
+        <label class="form-label">生成模式</label>
         <div class="segmented-control">
-          <label><input type="radio" name="mb-mode" value="single" checked><span>基础域名</span></label>
-          <label><input type="radio" name="mb-mode" value="multi"><span>多级域名</span></label>
+          <label id="mb-mode-single-wrap"><input type="radio" name="mb-mode" value="single" checked><span>单域名</span></label>
+          <label id="mb-mode-multi-wrap"><input type="radio" name="mb-mode" value="multi"><span>随机多级</span></label>
         </div>
-        <div class="form-hint" id="mb-mode-hint">基础域名会生成 @mail.example.com。</div>
+        <div class="form-hint" id="mb-mode-hint">单域名会生成 @mail.example.com。</div>
       </div>
       <div class="form-group" id="mb-subdomain-group" style="display:none">
         <label class="form-label">自定义多级子域名</label>
@@ -869,6 +862,8 @@ window.createMailbox = async function() {
   const subdomainGroup = overlay.querySelector('#mb-subdomain-group');
   const subdomainSuffix = overlay.querySelector('#mb-subdomain-suffix');
   const modeHint = overlay.querySelector('#mb-mode-hint');
+  const singleModeWrap = overlay.querySelector('#mb-mode-single-wrap');
+  const multiModeWrap = overlay.querySelector('#mb-mode-multi-wrap');
 
   function selectedDomainOption() {
     return domainSelect.options[domainSelect.selectedIndex];
@@ -880,16 +875,23 @@ window.createMailbox = async function() {
 
   function updateMailboxModeUI() {
     const opt = selectedDomainOption();
-    const type = opt?.dataset?.type || '';
     const base = opt?.dataset?.base || '';
-    const isWildcard = type === 'wildcard';
+    const supportsSingle = !opt || !opt.value || opt.dataset.single === '1';
+    const supportsWildcard = !opt || !opt.value || opt.dataset.wildcard === '1';
+    const hasBoth = supportsSingle && supportsWildcard;
+    const singleInput = overlay.querySelector('input[name="mb-mode"][value="single"]');
+    const multiInput = overlay.querySelector('input[name="mb-mode"][value="multi"]');
+    singleModeWrap.style.display = supportsSingle ? '' : 'none';
+    multiModeWrap.style.display = supportsWildcard ? '' : 'none';
+    if (!supportsSingle && supportsWildcard) multiInput.checked = true;
+    if (supportsSingle && !supportsWildcard) singleInput.checked = true;
     const mode = selectedMode();
-    modeGroup.style.display = isWildcard ? '' : 'none';
-    subdomainGroup.style.display = isWildcard && mode === 'multi' ? '' : 'none';
+    modeGroup.style.display = hasBoth || (!supportsSingle && supportsWildcard) ? '' : 'none';
+    subdomainGroup.style.display = supportsWildcard && mode === 'multi' ? '' : 'none';
     subdomainSuffix.textContent = base ? `.${base}` : '';
     modeHint.textContent = mode === 'multi'
       ? '多级域名会生成 @a.b.c.mail.example.com。'
-      : '基础域名会生成 @mail.example.com。';
+      : '单域名会生成 @mail.example.com。';
   }
 
   domainSelect.addEventListener('change', updateMailboxModeUI);
@@ -903,8 +905,8 @@ window.createMailbox = async function() {
     const address = overlay.querySelector('#mb-address').value.trim();
     const opt     = selectedDomainOption();
     const domainID = Number(domainSelect.value || 0);
-    const isWildcard = (opt?.dataset?.type || '') === 'wildcard';
-    const mode    = isWildcard ? selectedMode() : 'single';
+    const supportsWildcard = !opt || !opt.value || opt.dataset.wildcard === '1';
+    const mode    = selectedMode();
     const subdomain = overlay.querySelector('#mb-subdomain').value.trim();
     btn.disabled  = true;
     btn.textContent = '创建中...';
@@ -912,7 +914,7 @@ window.createMailbox = async function() {
       const body = { mode };
       if (address) body.address = address;
       if (domainID) body.domain_id = domainID;
-      if (isWildcard && mode === 'multi' && subdomain) body.subdomain = subdomain;
+      if (supportsWildcard && mode === 'multi' && subdomain) body.subdomain = subdomain;
       const mb = await api.createMailbox(body);
       overlay.remove();
       toast(`已创建：${mb.full_address}`, 'success');
@@ -1198,7 +1200,7 @@ async function renderDomainsGuide(container) {
               <div class="step-num">2</div>
               <div class="step-body">
                 <div class="step-title">配置 MX 记录</div>
-                <div class="step-desc">普通域名配置一条 MX；通配域名（如 <code>*.mail.example.com</code>）需要同时配置基础域名和通配子域 MX。</div>
+                <div class="step-desc">提交基础域名（如 <code>mail.example.com</code>），系统会分别检测单域名 MX 和通配子域 MX，并按可用能力开放生成模式。</div>
                 <table class="dns-table" style="margin-top:0.5rem">
                   <thead><tr><th>类型</th><th>主机名</th><th>内容</th><th>优先级</th></tr></thead>
                   <tbody>
@@ -1341,6 +1343,7 @@ async function renderAdminDomains(container) {
   if (actions) {
     actions.innerHTML = `
       <button class="btn btn-primary btn-sm" onclick="showAddDomainModal()">${iconButton('plus', '手动添加')}</button>
+      <button class="btn btn-ghost btn-sm" onclick="refreshDomainMX()" style="margin-left:0.4rem">${iconButton('refresh', '刷新 MX')}</button>
       <button class="btn btn-success btn-sm" onclick="showMXRegisterModal()" style="margin-left:0.4rem">${iconButton('zap', 'MX 自动注册')}</button>
     `;
   }
@@ -1380,16 +1383,20 @@ async function renderAdminDomains(container) {
       <div class="card">
         <div class="card-header">
           <div class="card-title">${icon('globe')} 域名列表</div>
-          <div style="font-size:0.78rem;color:var(--text-muted)">共 ${active.length} 个</div>
+          <div style="font-size:0.78rem;color:var(--text-muted)">后台会定期刷新单域名和通配子域能力，共 ${active.length} 个</div>
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>域名</th><th>状态</th><th>操作</th></tr></thead>
+            <thead><tr><th>域名</th><th>能力</th><th>状态</th><th>操作</th></tr></thead>
             <tbody>
-              ${active.length === 0 ? `<tr><td colspan="3" style="text-align:center;color:var(--text-muted)">暂无域名</td></tr>` :
+              ${active.length === 0 ? `<tr><td colspan="4" style="text-align:center;color:var(--text-muted)">暂无域名</td></tr>` :
                 active.map(d => `
                   <tr>
-                    <td style="font-family:var(--font-mono)">${escHtml(d.domain)}</td>
+                    <td style="font-family:var(--font-mono)">${escHtml(d.base_domain || d.domain)}</td>
+                    <td style="display:flex;gap:0.35rem;flex-wrap:wrap">
+                      ${d.supports_single ? `<span class="badge badge-green">单域名</span>` : `<span class="badge badge-gray">单域名未通过</span>`}
+                      ${d.supports_wildcard ? `<span class="badge badge-green">通配子域</span>` : `<span class="badge badge-gray">通配未通过</span>`}
+                    </td>
                     <td>${d.is_active
                       ? `<span class="badge badge-green">${icon('circle')} 启用</span>`
                       : `<span class="badge badge-gray">${icon('circle')} 停用</span>`}</td>
@@ -1563,6 +1570,14 @@ window.toggleDomain = async function(id, newActive) {
     toast('状态已切换', 'success');
     navigate('admin-domains');
   } catch(e) { toast('操作失败: ' + e.message, 'error'); }
+};
+
+window.refreshDomainMX = async function() {
+  try {
+    await api.admin.refreshDomainMX();
+    toast('MX 能力已刷新', 'success');
+    navigate('admin-domains');
+  } catch(e) { toast('刷新失败: ' + e.message, 'error'); }
 };
 
 window.confirmDeleteDomain = function(id, name) {
