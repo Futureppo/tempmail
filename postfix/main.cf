@@ -21,9 +21,10 @@ relay_domains =
 local_transport = error:local delivery disabled
 local_recipient_maps =
 
-# 虚拟域名 catch-all：直接通过 Postfix 内置 lmtp 客户端
+# 虚拟域名 catch-all：regexp map 支持精确域名和任意多级子域名，
+# 直接通过 Postfix 内置 lmtp 客户端
 # 把邮件送给常驻 mail-receiver daemon。
-virtual_mailbox_domains = hash:/etc/postfix/virtual_domains
+virtual_mailbox_domains = regexp:/etc/postfix/virtual_domains
 virtual_transport = lmtp:unix:private/mail-receiver
 
 # 限制

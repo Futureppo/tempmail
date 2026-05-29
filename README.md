@@ -100,7 +100,7 @@ SMTP_HOSTNAME=mail.yourdomain.com
 
 ### 方式一：用户自助提交（推荐）
 
-1. 登录后进入「域名列表」→「⚡ 提交域名」
+1. 登录后进入「域名列表」→「提交域名」
 2. 填写域名，系统会展示所需 DNS 记录
 3. 在 DNS 面板完成配置后提交：
    - **MX 已生效** → 立即激活加入域名池
@@ -129,15 +129,47 @@ A    mail           <服务器公网 IP>
 TXT  @              v=spf1 ip4:<服务器公网 IP> ~all
 ```
 
+### 多级子域名邮箱
+
+如需生成并接收类似 `user@gmail.outlook.mail.com.net.example.com` 的多级子域邮箱，请提交通配域名：
+
+```
+*.example.com
+```
+
+DNS 需要能覆盖多层通配子域。已配置 `SMTP_HOSTNAME` 时推荐：
+
+```
+MX   *   mail.yourdomain.com   优先级 10
+TXT  *   v=spf1 ip4:<服务器IP> ~all
+```
+
+未配置 `SMTP_HOSTNAME` 时：
+
+```
+MX   *      mail.example.com   优先级 10
+A    mail   <服务器公网 IP>
+TXT  *      v=spf1 ip4:<服务器公网 IP> ~all
+```
+
+说明：
+
+- 前端新建邮箱默认使用普通单级域名，即 `mode=single`。
+- API 新建邮箱未传 `mode` 时优先使用多级域名；如果没有已激活的 `*.example.com` 通配域名，会自动回退到普通单级域名，兼容旧调用。
+- 如需 API 创建普通邮箱，请显式传 `{"mode":"single"}`。
+- 提交后系统会用类似 `mx-check.gmail.outlook.mail.com.net.example.com` 的多级主机名验证 MX 是否已经覆盖多层子域。
+
 ---
 
 ## API 使用
 
-所有 API 请求需在 Header 携带：
+所有 `/api/*` 请求需在 Header 携带：
 
 ```
-X-API-Key: tm_xxxxxxxxxxxx
+Authorization: Bearer tm_xxxxxxxxxxxx
 ```
+
+也兼容 `?api_key=tm_xxxxxxxxxxxx` 查询参数。
 
 ### 常用接口
 
@@ -151,26 +183,44 @@ curl "$BASE/public/domains"
 # 获取公开设置（无需登录）
 curl "$BASE/public/settings"
 
-# 创建邮箱
+# 创建邮箱（随机生成普通单域名或 10-14 级多级域名邮箱；缺少对应域名类型时自动回退）
 curl -X POST "$BASE/api/mailboxes" \
-  -H "X-API-Key: $KEY" \
+  -H "Authorization: Bearer $KEY" \
   -H "Content-Type: application/json" \
-  -d '{"address":"test","domain_id":"<domain-uuid>"}'
+  -d '{"address":"test"}'
+
+# 创建普通单级域名邮箱
+curl -X POST "$BASE/api/mailboxes" \
+  -H "Authorization: Bearer $KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"single","address":"test","domain":"mail.example.com"}'
+
+# 指定通配基础域名创建多级域名邮箱
+curl -X POST "$BASE/api/mailboxes" \
+  -H "Authorization: Bearer $KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"multi","address":"test","domain":"example.com"}'
 
 # 列出邮箱
-curl "$BASE/api/mailboxes" -H "X-API-Key: $KEY"
+curl "$BASE/api/mailboxes" -H "Authorization: Bearer $KEY"
 
 # 读取邮件
-curl "$BASE/api/mailboxes/<mailbox-id>/emails" -H "X-API-Key: $KEY"
+curl "$BASE/api/mailboxes/<mailbox-id>/emails" -H "Authorization: Bearer $KEY"
 
 # 提交域名（任意登录用户）
 curl -X POST "$BASE/api/domains/submit" \
-  -H "X-API-Key: $KEY" \
+  -H "Authorization: Bearer $KEY" \
   -H "Content-Type: application/json" \
   -d '{"domain":"example.com"}'
 
+# 提交通配域名（多级邮箱）
+curl -X POST "$BASE/api/domains/submit" \
+  -H "Authorization: Bearer $KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"domain":"*.example.com"}'
+
 # 查询域名验证状态
-curl "$BASE/api/domains/<domain-id>/status" -H "X-API-Key: $KEY"
+curl "$BASE/api/domains/<domain-id>/status" -H "Authorization: Bearer $KEY"
 
 # 获取统计（无需登录）
 curl "$BASE/public/stats"
@@ -195,12 +245,17 @@ X-RateLimit-Reset: 1735000000
 | `sql/init.sql` | 全量初始化（新库使用）|
 | `sql/migrate_v2.sql` | v1 → v2：添加邮箱 `expires_at` 字段 |
 | `sql/migrate_v3.sql` | v2 → v3：域名 `status`、`mx_checked_at`，新增系统配置项（含 `smtp_hostname`）|
+| `sql/migrate_v4.sql` | v3 → v4：Linux DO Connect 登录与登录方式开关 |
+| `sql/migrate_v5.sql` | v4 → v5：累计收件统计 |
+| `sql/migrate_v6.sql` | v5 → v6：账户收件统计 |
+| `sql/migrate_v7.sql` | v6 → v7：自定义站点 Logo |
+| `sql/migrate_v8.sql` | v7 → v8：多级/通配域名支持 |
 
 对已运行的库执行迁移：
 
 ```bash
 docker exec -i $(docker compose ps -q postgres) \
-  psql -U tempmail -d tempmail < sql/migrate_v3.sql
+  psql -U tempmail -d tempmail < sql/migrate_v8.sql
 ```
 
 ---

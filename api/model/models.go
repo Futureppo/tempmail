@@ -30,6 +30,8 @@ type AccountWithStats struct {
 type Domain struct {
 	ID          int        `json:"id"`
 	Domain      string     `json:"domain"`
+	DomainType  string     `json:"domain_type"` // exact | wildcard
+	BaseDomain  string     `json:"base_domain"`
 	IsActive    bool       `json:"is_active"`
 	Status      string     `json:"status"` // active | pending | disabled
 	CreatedAt   time.Time  `json:"created_at"`
@@ -97,7 +99,11 @@ type AddDomainResp struct {
 }
 
 type CreateMailboxReq struct {
-	Address string `json:"address,omitempty"` // 可选，为空则随机生成
+	Address   string `json:"address,omitempty"` // 可选，为空则随机生成
+	Domain    string `json:"domain,omitempty"`
+	DomainID  int    `json:"domain_id,omitempty"`
+	Mode      string `json:"mode,omitempty"`      // single | multi，未传时随机
+	Subdomain string `json:"subdomain,omitempty"` // multi 模式下自定义多级子域名前缀
 }
 
 type CreateMailboxResp struct {

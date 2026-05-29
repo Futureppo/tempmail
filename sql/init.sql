@@ -29,14 +29,20 @@ CREATE INDEX idx_accounts_api_key ON accounts (api_key);
 CREATE TABLE domains (
     id            SERIAL PRIMARY KEY,
     domain        VARCHAR(255) NOT NULL UNIQUE,
+    domain_type   VARCHAR(16)  NOT NULL DEFAULT 'exact',  -- exact / wildcard
+    base_domain   VARCHAR(255) NOT NULL DEFAULT '',
     is_active     BOOLEAN      NOT NULL DEFAULT TRUE,
     status        VARCHAR(16)  NOT NULL DEFAULT 'active',  -- active / pending / disabled
     mx_checked_at TIMESTAMPTZ,                             -- 最近一次 MX 检测时间
-    created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_domains_type CHECK (domain_type IN ('exact', 'wildcard')),
+    CONSTRAINT chk_domains_base_domain_nonempty CHECK (base_domain <> '')
 );
 
 CREATE INDEX idx_domains_active ON domains (is_active) WHERE is_active = TRUE;
 CREATE INDEX idx_domains_status ON domains (status) WHERE status = 'pending';
+CREATE INDEX idx_domains_active_type ON domains (domain_type) WHERE is_active = TRUE;
+CREATE INDEX idx_domains_base_domain ON domains (base_domain);
 
 -- ============================================================
 -- 3. 邮箱表 (mailboxes)

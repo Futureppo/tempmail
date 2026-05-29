@@ -30,7 +30,7 @@ func main() {
 		log.Fatalf("failed to connect database: %v", err)
 	}
 	defer db.Close()
-	log.Println("✓ Database connected")
+	log.Println("[OK] Database connected")
 
 	// ==================== 连接 Redis ====================
 	rdb := redis.NewClient(&redis.Options{
@@ -47,7 +47,7 @@ func main() {
 		log.Fatalf("failed to connect redis: %v", err)
 	}
 	defer rdb.Close()
-	log.Println("✓ Redis connected")
+	log.Println("[OK] Redis connected")
 
 	// ==================== Gin 路由 ====================
 	gin.SetMode(gin.ReleaseMode)
@@ -58,7 +58,7 @@ func main() {
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:  []string{"*"},
 		AllowMethods:  []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:  []string{"Origin", "Content-Type", "Authorization"},
+		AllowHeaders:  []string{"Origin", "Content-Type", "Authorization", "X-API-Key"},
 		ExposeHeaders: []string{"X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"},
 		MaxAge:        12 * time.Hour,
 	}))
@@ -220,7 +220,7 @@ func main() {
 	go func() {
 		ticker := time.NewTicker(1 * time.Minute)
 		defer ticker.Stop()
-		log.Println("✓ Mailbox expiry cleaner started (TTL=30min, interval=1min)")
+		log.Println("[OK] Mailbox expiry cleaner started (TTL=30min, interval=1min)")
 		for range ticker.C {
 			if deleted, err := db.DeleteExpiredMailboxes(context.Background()); err != nil {
 				log.Printf("[cleaner] error: %v", err)
@@ -232,13 +232,13 @@ func main() {
 
 	// ==================== 邮件统计计数器后台 flush ====================
 	go db.RunStatsFlusher(ctx, time.Second)
-	log.Println("✓ Email stats flusher started (interval=1s)")
+	log.Println("[OK] Email stats flusher started (interval=1s)")
 
 	// ==================== MX 自动验证轮询 ====================
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
-		log.Println("✓ MX domain verifier started (pending check=30s, active re-check=6h)")
+		log.Println("[OK] MX domain verifier started (pending check=30s, active re-check=6h)")
 		reCheckTicker := time.NewTicker(6 * time.Hour)
 		defer reCheckTicker.Stop()
 		for {
@@ -264,7 +264,7 @@ func main() {
 						if err := db.PromoteDomainToActive(context.Background(), d.ID); err != nil {
 							log.Printf("[mx-verifier] promote %s error: %v", d.Domain, err)
 						} else {
-							log.Printf("[mx-verifier] ✓ %s MX verified, domain activated", d.Domain)
+							log.Printf("[mx-verifier] [OK] %s MX verified, domain activated", d.Domain)
 						}
 					} else {
 						log.Printf("[mx-verifier] waiting: %s — %s", d.Domain, mxStatus)
@@ -290,7 +290,7 @@ func main() {
 						if err := db.DisableDomainMX(context.Background(), d.ID); err != nil {
 							log.Printf("[mx-recheck] disable %s error: %v", d.Domain, err)
 						} else {
-							log.Printf("[mx-recheck] ⚠ %s MX no longer valid (%s), domain disabled", d.Domain, mxStatus)
+							log.Printf("[mx-recheck] [WARN] %s MX no longer valid (%s), domain disabled", d.Domain, mxStatus)
 						}
 					}
 				}
@@ -316,10 +316,10 @@ func main() {
 			if err := os.WriteFile(keyFile, []byte(content), 0600); err != nil {
 				log.Printf("[adminkey] write file error: %v", err)
 			} else {
-				log.Printf("✓ Admin API Key written to %s", keyFile)
+				log.Printf("[OK] Admin API Key written to %s", keyFile)
 			}
 		}
-		log.Printf("✴ ADMIN API KEY: %s", adminKey)
+		log.Printf("[ADMIN API KEY] %s", adminKey)
 	}()
 
 	// ==================== 启动服务 ====================
@@ -332,7 +332,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("✓ API server listening on :%s", cfg.Port)
+		log.Printf("[OK] API server listening on :%s", cfg.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen: %v", err)
 		}

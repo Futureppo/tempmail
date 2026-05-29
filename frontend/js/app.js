@@ -42,9 +42,57 @@ const el = (tag, cls, html) => {
   return e;
 };
 
+const ICON_PATHS = {
+  alert: '<path d="M10.3 3.3 1.8 17.5a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.3a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  arrowLeft: '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+  book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5Z"/>',
+  chart: '<path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-7"/>',
+  check: '<path d="m20 6-11 11-5-5"/>',
+  chevronsRight: '<path d="m13 17 5-5-5-5"/><path d="m6 17 5-5-5-5"/>',
+  circle: '<circle cx="12" cy="12" r="8"/>',
+  clipboard: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>',
+  copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><rect x="2" y="2" width="13" height="13" rx="2"/>',
+  fileText: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>',
+  flask: '<path d="M9 3h6"/><path d="M10 3v6l-5 8a3 3 0 0 0 2.6 4.5h8.8A3 3 0 0 0 19 17l-5-8V3"/><path d="M7 16h10"/>',
+  globe: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
+  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+  inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="m5.5 5 13 0 3.5 7v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-5Z"/>',
+  key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m12 12 9-9"/><path d="m17 3 4 4"/><path d="m14 6 4 4"/>',
+  lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  logOut: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+  mailOpen: '<path d="M21.2 8.4 12 14 2.8 8.4"/><path d="M21 8.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8.5L12 3Z"/>',
+  megaphone: '<path d="m3 11 18-5v12L3 13Z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+  menu: '<path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/>',
+  moon: '<path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/>',
+  party: '<path d="m5 22 14-14-5-3L2 17Z"/><path d="m14 5 5-3"/><path d="m18 9 4 1"/><path d="M10 4V2"/><path d="m7 9 2 2"/><path d="m13 13 2 2"/>',
+  plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
+  refresh: '<path d="M21 12a9 9 0 0 1-15.2 6.5L3 16"/><path d="M3 21v-5h5"/><path d="M3 12A9 9 0 0 1 18.2 5.5L21 8"/><path d="M21 3v5h-5"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  settings: '<path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 1 1 4.2 17l.1-.1A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.3 7A2 2 0 1 1 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 1 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1a2 2 0 1 1 0 4H21a1.7 1.7 0 0 0-1.6 1Z"/>',
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.3 17.7-1.4 1.4"/><path d="m19.1 4.9-1.4 1.4"/>',
+  timer: '<path d="M10 2h4"/><path d="M12 14v-4"/><circle cx="12" cy="14" r="8"/>',
+  trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/>',
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/>',
+  x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  zap: '<path d="M13 2 3 14h8l-1 8 11-14h-8Z"/>',
+};
+
+function icon(name, cls = '') {
+  const path = ICON_PATHS[name] || ICON_PATHS.info;
+  const className = cls ? `ui-icon ${cls}` : 'ui-icon';
+  return `<svg class="${className}" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${path}</svg>`;
+}
+
+function iconButton(name, label = '', cls = '') {
+  return `${icon(name, cls)}${label ? ` <span>${label}</span>` : ''}`;
+}
+
 function toast(msg, type = 'info') {
-  const icons = { success: '✓', error: '✗', warn: '⚠', info: 'ℹ' };
-  const t = el('div', `toast ${type}`, `<span>${icons[type]||'ℹ'}</span><span>${escHtml(msg)}</span>`);
+  const icons = { success: 'check', error: 'x', warn: 'alert', info: 'info' };
+  const t = el('div', `toast ${type}`, `${icon(icons[type] || 'info')}<span>${escHtml(msg)}</span>`);
   const c = $('toast-container');
   c.appendChild(t);
   setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 0.3s'; setTimeout(() => t.remove(), 300); }, 3500);
@@ -104,7 +152,11 @@ async function apiFetch(path, opts = {}) {
   try { data = await res.json(); } catch { data = {}; }
   if (!res.ok) {
     const errMsg = data.error || data.message || `HTTP ${res.status}`;
-    throw new Error(errMsg);
+    const err = new Error(errMsg);
+    err.status = res.status;
+    err.data = data;
+    err.details = data.mx_details || data.details || [];
+    throw err;
   }
   return data;
 }
@@ -152,7 +204,76 @@ const api = {
 function logoHTML(cls) {
   const url = (state.settings?.site_logo_url || '').trim();
   if (url) return `<img class="${cls}" src="${escHtml(url)}" alt="Logo" loading="lazy" />`;
-  return `<div class="${cls}">✉</div>`;
+  return `<div class="${cls}">${icon('mail')}</div>`;
+}
+
+function normalizeDomainInput(domain) {
+  return String(domain || '').trim().toLowerCase().replace(/\.$/, '');
+}
+
+function domainBaseName(domain) {
+  const d = normalizeDomainInput(domain);
+  return d.startsWith('*.') ? d.slice(2) : d;
+}
+
+function isWildcardDomainInput(domain) {
+  return normalizeDomainInput(domain).startsWith('*.');
+}
+
+function dnsHostDisplay(host) {
+  return host || '@';
+}
+
+function dnsRecordsForInput(domain, serverIP, serverHostname) {
+  const d = normalizeDomainInput(domain) || 'example.com';
+  const base = domainBaseName(d) || 'example.com';
+  const wildcard = isWildcardDomainInput(d);
+  const ip = serverIP || '<服务器IP>';
+  const mxTarget = serverHostname || 'mail.' + base;
+  const records = [];
+  if (wildcard) {
+    records.push(
+      { type: 'MX', host: base, value: mxTarget, priority: 10, note: '基础域名' },
+      { type: 'MX', host: '*.' + base, value: mxTarget, priority: 10, note: '通配子域' },
+      { type: 'TXT', host: base, value: `v=spf1 ip4:${ip} ~all`, priority: '—', note: 'SPF' },
+    );
+  } else {
+    records.push(
+      { type: 'MX', host: base, value: mxTarget, priority: 10, note: '域名收信' },
+      { type: 'TXT', host: base, value: `v=spf1 ip4:${ip} ~all`, priority: '—', note: 'SPF' },
+    );
+  }
+  if (!serverHostname) {
+    records.push({ type: 'A', host: mxTarget, value: ip, priority: '—', note: '邮件服务器' });
+  }
+  return records;
+}
+
+function dnsRowsHTML(records, compact = false) {
+  const pad = compact ? 'padding:2px 5px' : 'padding:3px 8px';
+  return (records || []).map(r => `
+    <tr>
+      <td style="${pad};font-weight:600">${escHtml(r.type)}</td>
+      <td style="${pad};font-family:monospace">${escHtml(dnsHostDisplay(r.host))}</td>
+      <td style="${pad};font-family:monospace;font-size:0.78rem">${escHtml(r.value)}</td>
+      <td style="${pad}">${r.priority || '—'}</td>
+    </tr>`).join('');
+}
+
+function mxDetailsHTML(details) {
+  if (!Array.isArray(details) || details.length === 0) return '';
+  return `
+    <div style="margin-top:0.45rem;display:grid;gap:0.3rem">
+      ${details.map(d => `
+        <div style="display:flex;gap:0.45rem;align-items:flex-start">
+          ${icon(d.matched ? 'check' : 'x')}
+          <div>
+            <div style="font-family:var(--font-mono);font-size:0.76rem">${escHtml(d.name || '')}</div>
+            <div style="color:var(--text-muted);font-size:0.76rem">${escHtml(d.kind === 'wildcard' ? '通配子域' : d.kind === 'base' ? '基础域名' : '域名')}：${escHtml(d.status || '')}</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
 }
 
 // ─── 主题 ────────────────────────────────────────────────────
@@ -173,7 +294,9 @@ function applyTheme(t, mode = state.themeMode) {
   }
   localStorage.setItem('tm_theme_mode', mode);
   const btn = $('btn-theme');
-  if (btn) btn.textContent = mode === 'auto' ? `自动 · ${t === 'dark' ? '深色' : '浅色'}` : (t === 'dark' ? '☀ 浅色' : '☾ 深色');
+  if (btn) btn.innerHTML = mode === 'auto'
+    ? `<span>自动 · ${t === 'dark' ? '深色' : '浅色'}</span>`
+    : iconButton(t === 'dark' ? 'sun' : 'moon', t === 'dark' ? '浅色' : '深色');
   document.querySelectorAll('.auth-theme-btn').forEach((button, index) => {
     if (index === 0) button.textContent = t === 'dark' ? '浅色' : '深色';
   });
@@ -387,12 +510,12 @@ window.doRegister = async function() {
     const area = $('auth-form-area');
     area.innerHTML = `
       <div class="apikey-hero">
-        <span class="big-icon">🎉</span>
+        <span class="big-icon">${icon('party')}</span>
         <h2>注册成功！</h2>
         <p>请保存您的 API Key，它不会再次显示。</p>
         <div class="code-box">
           <span id="new-key">${escHtml(result.api_key)}</span>
-          <button class="copy-btn" onclick="copyText('${escHtml(result.api_key)}')" title="复制">⎘</button>
+          <button class="copy-btn" onclick="copyText('${escHtml(result.api_key)}')" title="复制">${icon('copy')}</button>
         </div>
         <button class="btn btn-success" style="margin-top:1.2rem;width:100%" onclick="tryLogin('${escHtml(result.api_key)}')">立即登录</button>
       </div>
@@ -426,24 +549,24 @@ function buildMainLayout() {
       <div class="sidebar-nav">
         <div class="nav-section">邮件</div>
         <button class="nav-item active" data-page="dashboard" onclick="navigate('dashboard')">
-          <span class="nav-icon">⊞</span><span>邮箱总览</span>
+          <span class="nav-icon">${icon('grid')}</span><span>邮箱总览</span>
         </button>
         <button class="nav-item" data-page="domains-guide" onclick="navigate('domains-guide')">
-          <span class="nav-icon">◎</span><span>域名列表</span>
+          <span class="nav-icon">${icon('globe')}</span><span>域名列表</span>
         </button>
         <button class="nav-item" data-page="api-docs" onclick="navigate('api-docs')">
-          <span class="nav-icon">📖</span><span>API 文档</span>
+          <span class="nav-icon">${icon('book')}</span><span>API 文档</span>
         </button>
         ${isAdmin ? `
         <div class="nav-section">管理</div>
         <button class="nav-item" data-page="admin-accounts" onclick="navigate('admin-accounts')">
-          <span class="nav-icon">👥</span><span>账户管理</span>
+          <span class="nav-icon">${icon('users')}</span><span>账户管理</span>
         </button>
         <button class="nav-item" data-page="admin-domains" onclick="navigate('admin-domains')">
-          <span class="nav-icon">🌐</span><span>域名管理</span>
+          <span class="nav-icon">${icon('globe')}</span><span>域名管理</span>
         </button>
         <button class="nav-item" data-page="admin-settings" onclick="navigate('admin-settings')">
-          <span class="nav-icon">⚙</span><span>系统设置</span>
+          <span class="nav-icon">${icon('settings')}</span><span>系统设置</span>
         </button>
         ` : ''}
       </div>
@@ -455,15 +578,15 @@ function buildMainLayout() {
             <div class="user-chip-role">${isAdmin ? '管理员' : '普通用户'}</div>
           </div>
         </div>
-        <button class="btn-logout" onclick="logout()">⏏ 退出登录</button>
-        <button class="btn-theme" id="btn-theme" onclick="toggleTheme()">${state.theme==='dark'?'☀ 浅色':'☾ 深色'}</button>
+        <button class="btn-logout" onclick="logout()">${iconButton('logOut', '退出登录')}</button>
+        <button class="btn-theme" id="btn-theme" onclick="toggleTheme()">${iconButton(state.theme==='dark' ? 'sun' : 'moon', state.theme==='dark' ? '浅色' : '深色')}</button>
         <button class="btn-theme btn-theme-auto" onclick="useAutoTheme()">跟随系统</button>
       </div>
     </nav>
     <div class="content" id="content-area">
       <div class="topbar">
         <div>
-          <button class="hamburger-btn" id="hamburger-btn" onclick="toggleSidebar()" aria-label="菜单">☰</button>
+          <button class="hamburger-btn" id="hamburger-btn" onclick="toggleSidebar()" aria-label="菜单">${icon('menu')}</button>
           <div>
             <div class="topbar-title" id="topbar-title">邮箱总览</div>
             <div class="topbar-subtitle" id="topbar-subtitle"></div>
@@ -568,8 +691,8 @@ async function renderDashboard(container) {
   const actions = $('topbar-actions');
   if (actions) {
     actions.innerHTML = `
-      <button class="btn btn-primary btn-sm" onclick="createMailbox()">+ 新建邮箱</button>
-      <button class="btn btn-ghost btn-sm" onclick="navigate('apikey-show')" style="margin-left:0.4rem">⚿ 我的 API Key</button>
+      <button class="btn btn-primary btn-sm" onclick="createMailbox()">${iconButton('plus', '新建邮箱')}</button>
+      <button class="btn btn-ghost btn-sm" onclick="navigate('apikey-show')" style="margin-left:0.4rem">${iconButton('key', '我的 API Key')}</button>
     `;
   }
 
@@ -585,7 +708,7 @@ async function renderDashboard(container) {
     { label: '邮箱总量', value: st.total_mailboxes ?? '—',      note: `活跃 ${st.active_mailboxes ?? '—'} 个` },
     ...(isAdmin ? [
       { label: '账户总数', value: st.total_accounts ?? '—',       note: '注册用户' },
-      { label: '待验证域名', value: st.pending_domains ?? pendingDomains, note: pendingDomains > 0 ? '🔄 验证中' : '无' },
+      { label: '待验证域名', value: st.pending_domains ?? pendingDomains, note: pendingDomains > 0 ? '验证中' : '无' },
     ] : []),
   ];
 
@@ -594,7 +717,7 @@ async function renderDashboard(container) {
 
   container.innerHTML = `
     ${announcement ? `<div class="card" style="margin-bottom:1rem;background:var(--clr-primary,#4f6ef7);color:#fff;padding:0.7rem 1rem;font-size:0.84rem">
-      📢 ${escHtml(announcement)}</div>` : ''}
+      ${icon('megaphone')} ${escHtml(announcement)}</div>` : ''}
     <div class="stat-grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr))">
       ${statCards.map(s => `
         <div class="stat-card">
@@ -606,13 +729,13 @@ async function renderDashboard(container) {
     </div>
     ${pendingDomains > 0 ? `
       <div class="card" style="margin-top:0.8rem;border-left:3px solid var(--clr-warn,#e6a817)">
-        <div style="font-size:0.82rem">🔄 有 ${pendingDomains} 个域名正在 MX 验证中，通过后将自动加入域名池</div>
+        <div style="font-size:0.82rem">${icon('refresh')} 有 ${pendingDomains} 个域名正在 MX 验证中，通过后将自动加入域名池</div>
       </div>
     ` : ''}
     ${boxes.length === 0 ? `
       <div class="card" style="margin-top:0.8rem">
         <div class="empty-state">
-          <span class="empty-icon">✉</span>
+          <span class="empty-icon">${icon('mail')}</span>
           <p>还没有邮箱，点击右上角"新建邮箱"创建第一个</p>
         </div>
       </div>
@@ -631,11 +754,11 @@ function buildMailboxCard(mb) {
   if (expiresAt) {
     const diffMs = expiresAt - now;
     if (diffMs <= 0) {
-      expiryHtml = '<span style="color:var(--clr-danger);font-size:0.75rem">⏱ 已过期</span>';
+      expiryHtml = `<span style="color:var(--clr-danger);font-size:0.75rem">${icon('timer')} 已过期</span>`;
     } else {
       const mins = Math.ceil(diffMs / 60000);
       const color = mins <= 5 ? 'var(--clr-danger)' : mins <= 15 ? 'var(--clr-warn,#e6a817)' : 'var(--text-muted)';
-      expiryHtml = `<span style="color:${color};font-size:0.75rem">⏱ ${mins}分钟后删除</span>`;
+      expiryHtml = `<span style="color:${color};font-size:0.75rem">${icon('timer')} ${mins}分钟后删除</span>`;
     }
   }
   return `
@@ -646,9 +769,9 @@ function buildMailboxCard(mb) {
         ${expiryHtml}
       </div>
       <div class="mailbox-actions">
-        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openInbox('${mb.id}','${escHtml(mb.full_address)}')">📬 查看邮件</button>
-        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();copyText('${escHtml(mb.full_address)}')" title="复制地址">⎘</button>
-        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();confirmDeleteMailbox('${mb.id}','${escHtml(mb.full_address)}')">✕</button>
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openInbox('${mb.id}','${escHtml(mb.full_address)}')">${iconButton('inbox', '查看邮件')}</button>
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();copyText('${escHtml(mb.full_address)}')" title="复制地址">${icon('copy')}</button>
+        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();confirmDeleteMailbox('${mb.id}','${escHtml(mb.full_address)}')">${icon('trash')}</button>
       </div>
     </div>
   `;
@@ -671,14 +794,17 @@ window.createMailbox = async function() {
   if (old) old.remove();
   const overlay = el('div', 'modal-overlay');
 
-  const domainOptions = activeDomains.map(d =>
-    `<option value="${escHtml(d.domain)}">${escHtml(d.domain)}</option>`
-  ).join('');
+  const domainOptions = activeDomains.map(d => {
+    const type = d.domain_type || 'exact';
+    const label = type === 'wildcard' ? (d.base_domain || String(d.domain || '').replace(/^\*\./, '')) : d.domain;
+    const suffix = type === 'wildcard' ? '（通配）' : '';
+    return `<option value="${d.id}" data-type="${escHtml(type)}" data-domain="${escHtml(d.domain)}" data-base="${escHtml(d.base_domain || label)}">${escHtml(label)}${suffix}</option>`;
+  }).join('');
 
   overlay.innerHTML = `
-    <div class="modal" style="max-width:420px">
-      <div class="modal-title">+ 新建临时邮箱</div>
-      <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
+    <div class="modal" style="max-width:460px">
+      <div class="modal-title">${icon('plus')} 新建临时邮箱</div>
+      <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">${icon('x')}</button>
       <div class="form-group" style="margin-top:0.8rem">
         <label class="form-label">本地部分（@ 之前）</label>
         <input class="form-input" id="mb-address" placeholder="留空则随机生成" autocomplete="off" />
@@ -692,6 +818,23 @@ window.createMailbox = async function() {
             ${domainOptions}
           </select>
         </div>
+        <div class="form-hint" id="mb-domain-hint">选择通配域名时，默认使用基础域名创建邮箱。</div>
+      </div>
+      <div class="form-group" id="mb-mode-group" style="display:none">
+        <label class="form-label">通配域名模式</label>
+        <div class="segmented-control">
+          <label><input type="radio" name="mb-mode" value="single" checked><span>基础域名</span></label>
+          <label><input type="radio" name="mb-mode" value="multi"><span>多级域名</span></label>
+        </div>
+        <div class="form-hint" id="mb-mode-hint">基础域名会生成 @mail.example.com。</div>
+      </div>
+      <div class="form-group" id="mb-subdomain-group" style="display:none">
+        <label class="form-label">自定义多级子域名</label>
+        <div class="input-affix">
+          <input class="form-input" id="mb-subdomain" placeholder="留空则随机生成，如 gmail.outlook.mail.com" autocomplete="off" />
+          <span id="mb-subdomain-suffix"></span>
+        </div>
+        <div class="form-hint">只允许字母、数字、连字符和点，每段不能以连字符开头或结尾。</div>
       </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="this.closest('.modal-overlay').remove()">取消</button>
@@ -707,16 +850,55 @@ window.createMailbox = async function() {
     if (e.key === 'Enter') overlay.querySelector('#mb-confirm-btn').click();
   });
 
+  const domainSelect = overlay.querySelector('#mb-domain');
+  const modeGroup = overlay.querySelector('#mb-mode-group');
+  const subdomainGroup = overlay.querySelector('#mb-subdomain-group');
+  const subdomainSuffix = overlay.querySelector('#mb-subdomain-suffix');
+  const modeHint = overlay.querySelector('#mb-mode-hint');
+
+  function selectedDomainOption() {
+    return domainSelect.options[domainSelect.selectedIndex];
+  }
+
+  function selectedMode() {
+    return overlay.querySelector('input[name="mb-mode"]:checked')?.value || 'single';
+  }
+
+  function updateMailboxModeUI() {
+    const opt = selectedDomainOption();
+    const type = opt?.dataset?.type || '';
+    const base = opt?.dataset?.base || '';
+    const isWildcard = type === 'wildcard';
+    const mode = selectedMode();
+    modeGroup.style.display = isWildcard ? '' : 'none';
+    subdomainGroup.style.display = isWildcard && mode === 'multi' ? '' : 'none';
+    subdomainSuffix.textContent = base ? `.${base}` : '';
+    modeHint.textContent = mode === 'multi'
+      ? '多级域名会生成 @a.b.c.mail.example.com。'
+      : '基础域名会生成 @mail.example.com。';
+  }
+
+  domainSelect.addEventListener('change', updateMailboxModeUI);
+  overlay.querySelectorAll('input[name="mb-mode"]').forEach(input => {
+    input.addEventListener('change', updateMailboxModeUI);
+  });
+  updateMailboxModeUI();
+
   overlay.querySelector('#mb-confirm-btn').addEventListener('click', async () => {
     const btn     = overlay.querySelector('#mb-confirm-btn');
     const address = overlay.querySelector('#mb-address').value.trim();
-    const domain  = overlay.querySelector('#mb-domain').value;
+    const opt     = selectedDomainOption();
+    const domainID = Number(domainSelect.value || 0);
+    const isWildcard = (opt?.dataset?.type || '') === 'wildcard';
+    const mode    = isWildcard ? selectedMode() : 'single';
+    const subdomain = overlay.querySelector('#mb-subdomain').value.trim();
     btn.disabled  = true;
     btn.textContent = '创建中...';
     try {
-      const body = {};
+      const body = { mode };
       if (address) body.address = address;
-      if (domain)  body.domain  = domain;
+      if (domainID) body.domain_id = domainID;
+      if (isWildcard && mode === 'multi' && subdomain) body.subdomain = subdomain;
       const mb = await api.createMailbox(body);
       overlay.remove();
       toast(`已创建：${mb.full_address}`, 'success');
@@ -746,7 +928,7 @@ function renderApiKeyShow(container) {
   const key = state.apiKey || '—';
   container.innerHTML = `
     <div class="card" style="max-width:540px">
-      <div class="card-header"><div class="card-title">⚿ 我的 API Key</div></div>
+      <div class="card-header"><div class="card-title">${icon('key')} 我的 API Key</div></div>
       <div class="card-body">
         <p style="font-size:0.84rem;color:var(--text-secondary);margin-bottom:1rem">
           API Key 用于认证所有 API 请求。请勿泄露。
@@ -754,7 +936,7 @@ function renderApiKeyShow(container) {
         <div class="form-label">当前 API Key</div>
         <div class="code-box" style="margin-bottom:1rem">
           <span style="filter:blur(4px);cursor:pointer" id="key-blur" onclick="this.style.filter='none'">${escHtml(key)}</span>
-          <button class="copy-btn" onclick="copyText('${escHtml(key)}')" title="复制">⎘</button>
+          <button class="copy-btn" onclick="copyText('${escHtml(key)}')" title="复制">${icon('copy')}</button>
         </div>
         <p style="font-size:0.76rem;color:var(--text-muted)">点击 Key 可显示明文。保存后请妥善保管，丢失需联系管理员重置。</p>
         <div class="divider"></div>
@@ -775,9 +957,9 @@ async function renderInbox(container) {
   const actions = $('topbar-actions');
   if (actions) {
     actions.innerHTML = `
-      <button class="btn btn-ghost btn-sm" onclick="copyText('${escHtml(mb.full_address)}')">⎘ 复制地址</button>
-      <button class="btn btn-primary btn-sm" onclick="refreshInbox()" style="margin-left:0.4rem">↻ 刷新</button>
-      <button class="btn btn-ghost btn-sm" onclick="navigate('dashboard')" style="margin-left:0.4rem">← 返回</button>
+      <button class="btn btn-ghost btn-sm" onclick="copyText('${escHtml(mb.full_address)}')">${iconButton('copy', '复制地址')}</button>
+      <button class="btn btn-primary btn-sm" onclick="refreshInbox()" style="margin-left:0.4rem">${iconButton('refresh', '刷新')}</button>
+      <button class="btn btn-ghost btn-sm" onclick="navigate('dashboard')" style="margin-left:0.4rem">${iconButton('arrowLeft', '返回')}</button>
     `;
   }
 
@@ -805,7 +987,7 @@ async function renderInbox(container) {
     container.innerHTML = `
       <div class="card">
         <div class="empty-state">
-          <span class="empty-icon">📭</span>
+          <span class="empty-icon">${icon('mailOpen')}</span>
           <p>暂无邮件</p>
           <p style="margin-top:0.5rem;font-size:0.8rem">向 <strong>${escHtml(mb.full_address)}</strong> 发送邮件后，邮件将显示在此处</p>
         </div>
@@ -835,7 +1017,7 @@ function buildEmailItem(mbId, e) {
       </div>
       <div>
         <div class="email-time">${timeAgo(e.received_at)}</div>
-        <button class="btn btn-ghost btn-sm" style="margin-top:0.3rem" onclick="event.stopPropagation();deleteEmail('${mbId}','${e.id}')">✕</button>
+        <button class="btn btn-ghost btn-sm" style="margin-top:0.3rem" onclick="event.stopPropagation();deleteEmail('${mbId}','${e.id}')">${icon('trash')}</button>
       </div>
     </div>
   `;
@@ -869,7 +1051,7 @@ async function renderEmailView(container) {
   const actions = $('topbar-actions');
   if (actions) {
     actions.innerHTML = `
-      <button class="btn btn-ghost btn-sm" onclick="navigate('inbox')">← 返回列表</button>
+      <button class="btn btn-ghost btn-sm" onclick="navigate('inbox')">${iconButton('arrowLeft', '返回列表')}</button>
       <button class="btn btn-danger btn-sm" onclick="deleteEmail('${mb.id}','${eid}');navigate('inbox')" style="margin-left:0.4rem">删除</button>
     `;
   }
@@ -922,7 +1104,7 @@ async function renderEmailView(container) {
 async function renderDomainsGuide(container) {
   const actions = $('topbar-actions');
   if (actions) {
-    actions.innerHTML = `<button class="btn btn-success btn-sm" onclick="showMXRegisterModal()">⚡ 提交域名自动验证</button>`;
+    actions.innerHTML = `<button class="btn btn-success btn-sm" onclick="showMXRegisterModal()">${iconButton('zap', '提交域名自动验证')}</button>`;
   }
 
   const [domains, pub] = await Promise.all([
@@ -939,9 +1121,9 @@ async function renderDomainsGuide(container) {
   const active  = (domains||[]).filter(d => d.status !== 'pending');
 
   const pendingHtml = pending.length > 0 ? `
-    <div class="card" style="border-left:3px solid var(--clr-warn,#e6a817);margin-bottom:1rem">
+      <div class="card" style="border-left:3px solid var(--clr-warn,#e6a817);margin-bottom:1rem">
       <div class="card-header">
-        <div class="card-title">🔄 待 MX 验证 (${pending.length})</div>
+        <div class="card-title">${icon('refresh')} 待 MX 验证 (${pending.length})</div>
         <div style="font-size:0.78rem;color:var(--text-muted)">后台每 30 秒自动检测，验证通过后自动激活</div>
       </div>
       <div class="table-wrap">
@@ -952,7 +1134,7 @@ async function renderDomainsGuide(container) {
               <tr id="pending-row-${d.id}">
                 <td style="font-family:var(--font-mono);font-size:0.82rem">${escHtml(d.domain)}</td>
                 <td style="font-size:0.78rem">${d.mx_checked_at ? timeAgo(d.mx_checked_at) : '待首次检测'}</td>
-                <td><span class="badge badge-gold" id="pending-status-${d.id}">⏳ 检测中</span></td>
+                <td><span class="badge badge-gold" id="pending-status-${d.id}">${icon('timer')} 检测中</span></td>
               </tr>
             `).join('')}
           </tbody>
@@ -966,7 +1148,7 @@ async function renderDomainsGuide(container) {
     <div class="domain-guide-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;max-width:1000px">
       <div>
         <div class="card">
-          <div class="card-header"><div class="card-title">◎ 可用域名池</div></div>
+          <div class="card-header"><div class="card-title">${icon('globe')} 可用域名池</div></div>
           <div class="table-wrap">
             <table>
               <thead><tr><th>域名</th><th>状态</th></tr></thead>
@@ -977,8 +1159,8 @@ async function renderDomainsGuide(container) {
                     <tr>
                       <td style="font-family:var(--font-mono);font-size:0.82rem">${escHtml(d.domain)}</td>
                       <td>${d.is_active
-                        ? '<span class="badge badge-green">● 启用</span>'
-                        : '<span class="badge badge-gray">○ 停用</span>'}</td>
+                        ? `<span class="badge badge-green">${icon('circle')} 启用</span>`
+                        : `<span class="badge badge-gray">${icon('circle')} 停用</span>`}</td>
                     </tr>
                   `).join('')}
               </tbody>
@@ -989,7 +1171,7 @@ async function renderDomainsGuide(container) {
 
       <div>
         <div class="card">
-          <div class="card-header"><div class="card-title">📖 添加域名指南</div></div>
+          <div class="card-header"><div class="card-title">${icon('book')} 添加域名指南</div></div>
           <div class="card-body">
             <div class="guide-step">
               <div class="step-num">1</div>
@@ -1001,14 +1183,15 @@ async function renderDomainsGuide(container) {
             <div class="guide-step">
               <div class="step-num">2</div>
               <div class="step-body">
-                <div class="step-title">配置 MX 记录（仅需一条）</div>
-                <div class="step-desc">在 DNS 面板添加以下记录，让 SMTP 邮件投递到本服务器：</div>
+                <div class="step-title">配置 MX 记录</div>
+                <div class="step-desc">普通域名配置一条 MX；通配域名（如 <code>*.mail.example.com</code>）需要同时配置基础域名和通配子域 MX。</div>
                 <table class="dns-table" style="margin-top:0.5rem">
                   <thead><tr><th>类型</th><th>主机名</th><th>内容</th><th>优先级</th></tr></thead>
                   <tbody>
-                    <tr><td>MX</td><td>@</td><td style="font-family:monospace">${mxTarget}</td><td>10</td></tr>
+                    <tr><td>MX</td><td>example.com</td><td style="font-family:monospace">${mxTarget}</td><td>10</td></tr>
+                    <tr><td>MX</td><td>*.mail.example.com</td><td style="font-family:monospace">${mxTarget}</td><td>10</td></tr>
                     ${needsARec ? `<tr><td>A</td><td style="font-family:monospace">mail.yourdomain.com</td><td style="font-family:monospace">${ipLabel}</td><td>—</td></tr>` : ''}
-                    <tr><td>TXT</td><td>@</td><td style="font-family:monospace">v=spf1 ip4:${ipLabel} ~all</td><td>—</td></tr>
+                    <tr><td>TXT</td><td>example.com</td><td style="font-family:monospace">v=spf1 ip4:${ipLabel} ~all</td><td>—</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -1018,13 +1201,13 @@ async function renderDomainsGuide(container) {
               <div class="step-body">
                 <div class="step-title">提交域名自动验证</div>
                 <div class="step-desc">
-                  DNS 广播后（通常 5–30 分钟），点击右上角「⚡ 提交域名自动验证」按钮。<br>
+                  DNS 广播后（通常 5–30 分钟），点击右上角「提交域名自动验证」按钮。<br>
                   <ul style="margin:0.4rem 0 0 1rem;font-size:0.82rem">
-                    <li>MX 已生效 → <b>立即激活</b>加入域名池</li>
-                    <li>MX 未生效 → 进入<b>待验证队列</b>，后台每 30 秒自动重试</li>
+                    <li>MX 已生效后立即激活并加入域名池</li>
+                    <li>MX 未生效则进入<b>待验证队列</b>，后台每 30 秒自动重试</li>
                   </ul>
                 </div>
-                <button class="btn btn-success btn-sm" style="margin-top:0.5rem" onclick="showMXRegisterModal()">⚡ 提交域名</button>
+                <button class="btn btn-success btn-sm" style="margin-top:0.5rem" onclick="showMXRegisterModal()">${iconButton('zap', '提交域名')}</button>
               </div>
             </div>
             <div class="guide-step">
@@ -1049,7 +1232,7 @@ async function renderDomainsGuide(container) {
 async function renderAdminAccounts(container, page = 1) {
   const actions = $('topbar-actions');
   if (actions) {
-    actions.innerHTML = `<button class="btn btn-primary btn-sm" onclick="showCreateAccountModal()">+ 创建账户</button>`;
+    actions.innerHTML = `<button class="btn btn-primary btn-sm" onclick="showCreateAccountModal()">${iconButton('plus', '创建账户')}</button>`;
   }
 
   const size = 10;
@@ -1060,7 +1243,7 @@ async function renderAdminAccounts(container, page = 1) {
   container.innerHTML = `
     <div class="card" style="max-width:980px">
       <div class="card-header">
-        <div class="card-title">👥 账户列表</div>
+        <div class="card-title">${icon('users')} 账户列表</div>
         <div style="font-size:0.78rem;color:var(--text-muted)">共 ${total} 个账户 · 第 ${page}/${totalPages} 页</div>
       </div>
       <div class="table-wrap">
@@ -1075,7 +1258,7 @@ async function renderAdminAccounts(container, page = 1) {
                   <div style="font-weight:600">${escHtml(a.username || '—')}</div>
                   <div class="account-key-box">
                     <span>${escHtml(a.api_key || '—')}</span>
-                    <button class="copy-btn" onclick="copyText('${escHtml(a.api_key||'')}')">⎘</button>
+                    <button class="copy-btn" onclick="copyText('${escHtml(a.api_key||'')}')">${icon('copy')}</button>
                   </div>
                 </td>
                 <td>${a.is_admin
@@ -1143,8 +1326,8 @@ async function renderAdminDomains(container) {
   const actions = $('topbar-actions');
   if (actions) {
     actions.innerHTML = `
-      <button class="btn btn-primary btn-sm" onclick="showAddDomainModal()">+ 手动添加</button>
-      <button class="btn btn-success btn-sm" onclick="showMXRegisterModal()" style="margin-left:0.4rem">⚡ MX 自动注册</button>
+      <button class="btn btn-primary btn-sm" onclick="showAddDomainModal()">${iconButton('plus', '手动添加')}</button>
+      <button class="btn btn-success btn-sm" onclick="showMXRegisterModal()" style="margin-left:0.4rem">${iconButton('zap', 'MX 自动注册')}</button>
     `;
   }
 
@@ -1157,7 +1340,7 @@ async function renderAdminDomains(container) {
       ${pending.length > 0 ? `
         <div class="card" style="border-left:3px solid var(--clr-warn,#e6a817)">
           <div class="card-header">
-            <div class="card-title">🔄 待 MX 验证 (${pending.length})</div>
+            <div class="card-title">${icon('refresh')} 待 MX 验证 (${pending.length})</div>
             <div style="font-size:0.78rem;color:var(--text-muted)">后台每 30 秒自动检测，验证通过后自动加入域名池</div>
           </div>
           <div class="table-wrap">
@@ -1169,8 +1352,8 @@ async function renderAdminDomains(container) {
                     <td style="font-family:var(--font-mono)">${escHtml(d.domain)}</td>
                     <td style="font-size:0.78rem">${d.mx_checked_at ? timeAgo(d.mx_checked_at) : '从未'}</td>
                     <td>
-                      <span class="badge badge-gold" id="pending-status-${d.id}">⏳ 检测中</span>
-                      <button class="btn btn-danger btn-sm" style="margin-left:0.4rem" onclick="confirmDeleteDomain(${d.id},'${escHtml(d.domain)}')">✕</button>
+                      <span class="badge badge-gold" id="pending-status-${d.id}">${icon('timer')} 检测中</span>
+                      <button class="btn btn-danger btn-sm" style="margin-left:0.4rem" onclick="confirmDeleteDomain(${d.id},'${escHtml(d.domain)}')">${icon('trash')}</button>
                     </td>
                   </tr>
                 `).join('')}
@@ -1182,7 +1365,7 @@ async function renderAdminDomains(container) {
 
       <div class="card">
         <div class="card-header">
-          <div class="card-title">🌐 域名列表</div>
+          <div class="card-title">${icon('globe')} 域名列表</div>
           <div style="font-size:0.78rem;color:var(--text-muted)">共 ${active.length} 个</div>
         </div>
         <div class="table-wrap">
@@ -1194,8 +1377,8 @@ async function renderAdminDomains(container) {
                   <tr>
                     <td style="font-family:var(--font-mono)">${escHtml(d.domain)}</td>
                     <td>${d.is_active
-                      ? '<span class="badge badge-green">● 启用</span>'
-                      : '<span class="badge badge-gray">○ 停用</span>'}</td>
+                      ? `<span class="badge badge-green">${icon('circle')} 启用</span>`
+                      : `<span class="badge badge-gray">${icon('circle')} 停用</span>`}</td>
                     <td style="display:flex;gap:0.5rem;align-items:center">
                       <button class="btn btn-ghost btn-sm" onclick="toggleDomain(${d.id},${!d.is_active})">${d.is_active ? '停用' : '启用'}</button>
                       <button class="btn btn-danger btn-sm" onclick="confirmDeleteDomain(${d.id},'${escHtml(d.domain)}')">删除</button>
@@ -1231,7 +1414,7 @@ window.showAddDomainModal = function() {
   overlay.innerHTML = `
     <div class="modal" style="max-width:580px">
       <div class="modal-title">添加域名</div>
-      <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
+      <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">${icon('x')}</button>
 
       <div id="add-step1">
         <div class="form-group" style="margin-bottom:0.5rem">
@@ -1249,8 +1432,8 @@ window.showAddDomainModal = function() {
         <div id="add-mx-result" style="display:none;margin-bottom:0.7rem"></div>
         <div class="modal-actions" id="add-actions">
           <button class="btn btn-ghost" onclick="this.closest('.modal-overlay').remove()">取消</button>
-          <button class="btn btn-secondary" id="add-check-btn" onclick="doAddDomainCheck(false)">🔍 检测 MX</button>
-          <button class="btn btn-primary"  id="add-force-btn" style="display:none" onclick="doAddDomainCheck(true)">⚡ 强制添加</button>
+          <button class="btn btn-secondary" id="add-check-btn" onclick="doAddDomainCheck(false)">${iconButton('search', '检测 MX')}</button>
+          <button class="btn btn-primary"  id="add-force-btn" style="display:none" onclick="doAddDomainCheck(true)">${iconButton('zap', '强制添加')}</button>
         </div>
       </div>
 
@@ -1266,16 +1449,9 @@ window.showAddDomainModal = function() {
 
   function updateDnsHint() {
     const d = (inp?.value || '').trim() || 'example.com';
-    const ip = serverIP || '&lt;服务器IP&gt;';
-    const hn = serverHostname || 'mail.' + d;
-    const hasHostname = !!serverHostname;
     const tbody = document.getElementById('add-dns-rows');
     if (!tbody) return;
-    tbody.innerHTML = `
-      <tr><td style="padding:2px 5px">MX</td><td style="padding:2px 5px;font-family:monospace">@</td><td style="padding:2px 5px;font-family:monospace">${escHtml(hn)}</td><td style="padding:2px 5px">10</td></tr>
-      ${hasHostname ? '' : `<tr><td style="padding:2px 5px">A</td><td style="padding:2px 5px;font-family:monospace">mail.${escHtml(d)}</td><td style="padding:2px 5px;font-family:monospace">${escHtml(ip)}</td><td style="padding:2px 5px">—</td></tr>`}
-      <tr><td style="padding:2px 5px">TXT</td><td style="padding:2px 5px;font-family:monospace">@</td><td style="padding:2px 5px;font-family:monospace">v=spf1 ip4:${escHtml(ip)} ~all</td><td style="padding:2px 5px">—</td></tr>
-    `;
+    tbody.innerHTML = dnsRowsHTML(dnsRecordsForInput(d, serverIP, serverHostname), true);
   }
   updateDnsHint();
 
@@ -1308,28 +1484,29 @@ window.showAddDomainModal = function() {
           step2.style.display = 'block';
           step2.innerHTML = `
             <div style="text-align:center;padding:1.2rem 0">
-              <div style="font-size:2rem">✅</div>
+              <div style="font-size:2rem">${icon('check')}</div>
               <h3 style="margin:0.5rem 0">MX 验证通过</h3>
               <p style="font-size:0.84rem;color:var(--text-secondary)">域名 <strong>${escHtml(domain)}</strong> 已立即加入域名池</p>
               <button class="btn btn-primary" style="margin-top:1rem" onclick="this.closest('.modal-overlay').remove();navigate('admin-domains')">查看域名列表</button>
             </div>`;
         }
-        toast('✓ ' + domain + ' MX 验证通过，已加入域名池', 'success');
+        toast(domain + ' MX 验证通过，已加入域名池', 'success');
       } catch(err) {
         // MX 未通过 → 提示强制添加选项
-        if (checkBtn) { checkBtn.disabled = false; checkBtn.textContent = '🔍 检测 MX'; }
+        if (checkBtn) { checkBtn.disabled = false; checkBtn.innerHTML = iconButton('search', '检测 MX'); }
         if (forceBtn) forceBtn.style.display = '';
         if (resEl) {
           resEl.style.display = 'block';
           resEl.innerHTML = `
             <div style="background:var(--clr-warn-bg,#fff8e1);border:1px solid var(--clr-warn,#e6a817);border-radius:6px;padding:0.6rem 0.9rem;font-size:0.82rem">
-              ⚠️ <b>MX 记录未检测到</b>：${escHtml(err.message)}<br>
+              ${icon('alert')} <b>MX 记录未检测到</b>：${escHtml(err.message)}<br>
+              ${mxDetailsHTML(err.details)}
               <span style="color:var(--text-muted)">请先配置上方 DNS 记录后重新检测，或点击「强制添加」跳过检测直接加入域名池</span>
             </div>`;
         }
       }
     } catch(e) {
-      if (checkBtn) { checkBtn.disabled = false; checkBtn.textContent = '🔍 检测 MX'; }
+      if (checkBtn) { checkBtn.disabled = false; checkBtn.innerHTML = iconButton('search', '检测 MX'); }
       toast('操作失败: ' + e.message, 'error');
     }
   };
@@ -1338,19 +1515,13 @@ window.showAddDomainModal = function() {
 // \u5c55\u793a\u6dfb\u52a0\u57df\u540d\u540e\u7684 DNS \u914d\u7f6e\u6307\u5f15
 function showDnsInstructions(domain, result) {
   const dns = result.dns_records || [];
-  const rows = dns.map(r => `
-    <tr>
-      <td style="padding:3px 8px;font-weight:600">${escHtml(r.type)}</td>
-      <td style="padding:3px 8px">${escHtml(r.host)}</td>
-      <td style="padding:3px 8px;font-family:monospace;font-size:0.78rem">${escHtml(r.value)}</td>
-      <td style="padding:3px 8px">${r.priority || '\u2014'}</td>
-    </tr>`).join('');
+  const rows = dnsRowsHTML(dns);
   const old = document.querySelector('.modal-overlay');
   if (old) old.remove();
   const overlay = el('div', 'modal-overlay');
   overlay.innerHTML = `
     <div class="modal" style="max-width:600px">
-      <div class="modal-title">\u2705 \u57df\u540d\u5df2\u6dfb\u52a0\uff1a${escHtml(domain)}</div>
+      <div class="modal-title">${icon('check')} \u57df\u540d\u5df2\u6dfb\u52a0\uff1a${escHtml(domain)}</div>
       <p style="font-size:0.84rem;color:var(--text-secondary);margin:0.5rem 0 0.8rem">
         \u8bf7\u5728 DNS \u7ba1\u7406\u9762\u677f\u6dfb\u52a0\u4ee5\u4e0b\u8bb0\u5f55\uff0c\u4e00\u822c 5\u201330 \u5206\u949f\u751f\u6548\uff1a
       </p>
@@ -1360,7 +1531,7 @@ function showDnsInstructions(domain, result) {
           <tbody>${rows}</tbody>
         </table>
       </div>
-      <p style="font-size:0.78rem;color:var(--text-muted);margin-top:0.6rem">\u2139\ufe0f ${escHtml(result.instructions || '')}</p>
+      <p style="font-size:0.78rem;color:var(--text-muted);margin-top:0.6rem">${icon('info')} ${escHtml(result.instructions || '')}</p>
       <div class="modal-actions">
         <button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove();navigate('admin-domains')">
           \u5b8c\u6210\uff0c\u67e5\u770b\u57df\u540d\u5217\u8868
@@ -1381,7 +1552,7 @@ window.toggleDomain = async function(id, newActive) {
 };
 
 window.confirmDeleteDomain = function(id, name) {
-  showModal('删除域名', `<p>确定删除域名 <strong>${escHtml(name)}</strong>？</p>`, async () => {
+  showModal('删除域名', `<p>确定删除域名 <strong>${escHtml(name)}</strong>？</p><p style="font-size:0.82rem;color:var(--text-secondary)">如果该域名下还有邮箱，系统会拒绝删除。你可以先停用域名，避免继续生成新邮箱。</p>`, async () => {
     try {
       await api.admin.deleteDomain(id);
       toast('域名已删除', 'success');
@@ -1417,7 +1588,7 @@ async function renderAdminSettings(container) {
         <label class="form-label">${label}</label>
         <div style="display:flex;gap:0.5rem">
           <input class="form-input" id="${id}" value="${escHtml(value)}" placeholder="${escHtml(placeholder)}" style="flex:1" />
-          <button class="btn btn-primary btn-sm" onclick="saveSetting('${id}','${key}')">✓ 保存</button>
+          <button class="btn btn-primary btn-sm" onclick="saveSetting('${id}','${key}')">${iconButton('check', '保存')}</button>
         </div>
         ${hint ? `<div class="form-hint">${hint}</div>` : ''}
       </div>`;
@@ -1425,7 +1596,7 @@ async function renderAdminSettings(container) {
 
   container.innerHTML = `
     <div class="card" style="max-width:640px">
-      <div class="card-header"><div class="card-title">⚙ 系统设置</div></div>
+      <div class="card-header"><div class="card-title">${icon('settings')} 系统设置</div></div>
       <div class="card-body" style="display:flex;flex-direction:column;gap:0.1rem">
 
         <!-- 注册开关 -->
@@ -1468,14 +1639,14 @@ async function renderAdminSettings(container) {
           <label class="form-label">Linux DO Client ID</label>
           <div style="display:flex;gap:0.5rem">
             <input class="form-input" id="input-linuxdo-client-id" value="${escHtml(linuxDOClientID)}" placeholder="Client ID" style="flex:1" />
-            <button class="btn btn-primary btn-sm" onclick="saveSetting('input-linuxdo-client-id','linuxdo_client_id')">✓ 保存</button>
+            <button class="btn btn-primary btn-sm" onclick="saveSetting('input-linuxdo-client-id','linuxdo_client_id')">${iconButton('check', '保存')}</button>
           </div>
         </div>
         <div class="form-group">
           <label class="form-label">Linux DO Client Secret</label>
           <div style="display:flex;gap:0.5rem">
             <input class="form-input" id="input-linuxdo-client-secret" type="password" value="" placeholder="${linuxDOSecretSet ? '已配置，留空不修改' : 'Client Secret'}" style="flex:1" autocomplete="new-password" />
-            <button class="btn btn-primary btn-sm" onclick="saveSetting('input-linuxdo-client-secret','linuxdo_client_secret')">✓ 保存</button>
+            <button class="btn btn-primary btn-sm" onclick="saveSetting('input-linuxdo-client-secret','linuxdo_client_secret')">${iconButton('check', '保存')}</button>
           </div>
           <div class="form-hint">${linuxDOSecretSet ? 'Client Secret 已配置。出于安全原因不会回显，留空保存不会覆盖。' : 'Client Secret 只保存在后端数据库，不会通过公开配置下发。'}</div>
         </div>
@@ -1483,7 +1654,7 @@ async function renderAdminSettings(container) {
           <label class="form-label">Linux DO 回调地址</label>
           <div style="display:flex;gap:0.5rem">
             <input class="form-input" id="input-linuxdo-redirect-url" value="${escHtml(linuxDORedirectURL)}" placeholder="https://your-domain.com/public/auth/linuxdo/callback" style="flex:1" />
-            <button class="btn btn-primary btn-sm" onclick="saveSetting('input-linuxdo-redirect-url','linuxdo_redirect_url')">✓ 保存</button>
+            <button class="btn btn-primary btn-sm" onclick="saveSetting('input-linuxdo-redirect-url','linuxdo_redirect_url')">${iconButton('check', '保存')}</button>
           </div>
           <div class="form-hint">需要与 Connect.Linux.Do 应用后台配置的回调地址完全一致。</div>
         </div>
@@ -1499,7 +1670,7 @@ async function renderAdminSettings(container) {
           <label class="form-label">公告内容</label>
           <div style="display:flex;gap:0.5rem">
             <textarea class="form-input" id="input-announcement" rows="2" placeholder="留空则不显示公告" style="flex:1;resize:vertical">${escHtml(announce)}</textarea>
-            <button class="btn btn-primary btn-sm" onclick="saveSetting('input-announcement','announcement')" style="align-self:flex-start">✓ 保存</button>
+            <button class="btn btn-primary btn-sm" onclick="saveSetting('input-announcement','announcement')" style="align-self:flex-start">${iconButton('check', '保存')}</button>
           </div>
           <div class="form-hint">显示在已登录用户的 Dashboard 顶部</div>
         </div>
@@ -1542,7 +1713,7 @@ async function renderAdminSettings(container) {
           <div class="form-label">管理员 API Key</div>
           <div class="code-box" style="font-size:0.78rem">
             <span style="filter:blur(4px);cursor:pointer" onclick="this.style.filter='none'">${escHtml(state.apiKey)}</span>
-            <button class="copy-btn" onclick="copyText('${escHtml(state.apiKey)}')">⎘</button>
+            <button class="copy-btn" onclick="copyText('${escHtml(state.apiKey)}')">${icon('copy')}</button>
           </div>
           <div class="form-hint">Key 文件位置：<code>/data/admin.key</code>（API 服务容器内）</div>
         </div>
@@ -1600,7 +1771,7 @@ function showModal(title, bodyHtml, onConfirm) {
   overlay.innerHTML = `
     <div class="modal">
       <div class="modal-title">${escHtml(title)}</div>
-      <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
+      <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">${icon('x')}</button>
       ${bodyHtml}
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="this.closest('.modal-overlay').remove()">取消</button>
@@ -1638,13 +1809,13 @@ function startPendingDomainPoller(ids) {
         const statusEl = document.getElementById('pending-status-' + id);
         const rowEl    = document.getElementById('pending-row-'   + id);
         if (d.status === 'active') {
-          if (statusEl) statusEl.innerHTML = '<span class="badge badge-green">✓ 已激活</span>';
+          if (statusEl) statusEl.innerHTML = `<span class="badge badge-green">${icon('check')} 已激活</span>`;
           remaining.delete(id);
-          toast(`✓ 域名 ${d.domain} MX验证通过，已加入域名池`, 'success');
+          toast(`域名 ${d.domain} MX验证通过，已加入域名池`, 'success');
           setTimeout(() => { if (rowEl) rowEl.remove(); }, 3000);
         } else if (statusEl) {
           const ago = d.mx_checked_at ? timeAgo(d.mx_checked_at) : '从未';
-          statusEl.innerHTML = `<span class="badge badge-gold">⏳ 检测中（上次${ago}）</span>`;
+          statusEl.innerHTML = `<span class="badge badge-gold">${icon('timer')} 检测中（上次${ago}）</span>${mxDetailsHTML(d.mx_details)}`;
         }
       } catch {}
     }
@@ -1658,8 +1829,8 @@ window.showMXRegisterModal = function() {
   const overlay = el('div', 'modal-overlay');
   overlay.innerHTML = `
     <div class="modal" style="max-width:560px">
-      <div class="modal-title">⚡ MX 自动注册域名</div>
-      <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
+      <div class="modal-title">${icon('zap')} MX 自动注册域名</div>
+      <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">${icon('x')}</button>
       <p style="font-size:0.82rem;color:var(--text-secondary);margin:0.5rem 0 0.8rem">
         提交域名后系统立即检测 MX 记录。若已配置则直接激活；
         否则进入待验证队列，后台每 <b>30 秒</b>自动重试，无需手动确认。
@@ -1668,7 +1839,7 @@ window.showMXRegisterModal = function() {
         <label class="form-label">域名（如 example.com）</label>
         <input class="form-input" id="mxr-domain" placeholder="example.com" autofocus />
       </div>
-      <div id="mxr-dns-hint" style="display:none;background:var(--bg-secondary);border-radius:6px;padding:0.7rem 0.9rem;margin-bottom:0.6rem;font-size:0.8rem">
+      <div id="mxr-dns-hint" style="background:var(--bg-secondary);border-radius:6px;padding:0.7rem 0.9rem;margin-bottom:0.6rem;font-size:0.8rem">
         <b>请在 DNS 管理面板添加以下记录：</b>
         <table style="margin-top:0.5rem;width:100%;border-collapse:collapse;font-size:0.76rem">
           <thead><tr><th style="text-align:left">类型</th><th style="text-align:left">主机名</th><th style="text-align:left">内容</th><th style="text-align:left">优先级</th></tr></thead>
@@ -1688,8 +1859,17 @@ window.showMXRegisterModal = function() {
   // 实时更新 DNS 提示
   const inp = overlay.querySelector('#mxr-domain');
   inp?.addEventListener('keydown', e => { if (e.key === 'Enter') submitMXRegister(); });
+  inp?.addEventListener('input', updateMXRegisterHint);
 
   overlay.querySelector('#mxr-submit').addEventListener('click', submitMXRegister);
+
+  function updateMXRegisterHint() {
+    const domain = (inp?.value || '').trim() || 'example.com';
+    const rows = dnsRowsHTML(dnsRecordsForInput(domain, state.settings?.smtp_server_ip || '', state.settings?.smtp_hostname || ''), true);
+    const tbody = overlay.querySelector('#mxr-dns-rows');
+    if (tbody) tbody.innerHTML = rows;
+  }
+  updateMXRegisterHint();
 
   async function submitMXRegister() {
     const domain = (inp?.value || '').trim().toLowerCase();
@@ -1707,26 +1887,24 @@ window.showMXRegisterModal = function() {
       if (r.status === 'active') {
         overlay.innerHTML = `
           <div class="modal" style="text-align:center;padding:2rem">
-            <div style="font-size:2rem">✅</div>
+            <div style="font-size:2rem">${icon('check')}</div>
             <h3 style="margin:0.5rem 0">MX 验证通过</h3>
             <p style="font-size:0.84rem;color:var(--text-secondary)">域名 <strong>${escHtml(domain)}</strong> 已立即加入域名池</p>
             <button class="btn btn-primary" style="margin-top:1rem" onclick="this.closest('.modal-overlay').remove();navigate('${domainListPage}')">查看域名列表</button>
           </div>
         `;
-        toast(`✓ ${domain} 已激活`, 'success');
+        toast(`${domain} 已激活`, 'success');
       } else {
         // pending — 显示 DNS 配置 + 等待提示
-        const rows = (r.dns_required || []).map(rec =>
-          `<tr><td>${escHtml(rec.type)}</td><td style="font-family:monospace">${escHtml(rec.host)}</td><td style="font-family:monospace">${escHtml(rec.value)}</td><td>${rec.priority || '—'}</td></tr>`
-        ).join('');
-        overlay.querySelector('#mxr-dns-rows').innerHTML = rows;
+        overlay.querySelector('#mxr-dns-rows').innerHTML = dnsRowsHTML(r.dns_required || [], true);
         hint.style.display = 'block';
 
         status.style.display = 'block';
         status.innerHTML = `
           <div style="background:var(--clr-warn-bg,#fff8e1);border:1px solid var(--clr-warn,#e6a817);border-radius:6px;padding:0.6rem 0.9rem;font-size:0.81rem">
-            ⏳ <b>域名已加入验证队列（ID ${r.domain.id}）</b><br>
+            ${icon('timer')} <b>域名已加入验证队列（ID ${r.domain.id}）</b><br>
             MX 记录配置生效后（通常 5-30 分钟），系统将自动激活。<br>
+            ${mxDetailsHTML(r.mx_details)}
             <span style="color:var(--text-muted)">此窗口关闭后可在「域名列表」页查看验证进度</span>
           </div>
         `;
@@ -1740,7 +1918,7 @@ window.showMXRegisterModal = function() {
       btn.disabled = false;
       btn.textContent = '重新提交';
       status.style.display = 'block';
-      status.innerHTML = `<div style="color:var(--clr-danger);font-size:0.82rem">❌ ${escHtml(e.message)}</div>`;
+      status.innerHTML = `<div style="color:var(--clr-danger);font-size:0.82rem">${icon('x')} ${escHtml(e.message)}${mxDetailsHTML(e.details)}</div>`;
     }
   }
 
@@ -1756,15 +1934,15 @@ window.showMXRegisterModal = function() {
           clearInterval(timer);
           if (statusEl) statusEl.innerHTML = `
             <div style="background:#e8f5e9;border:1px solid #4caf50;border-radius:6px;padding:0.6rem 0.9rem;font-size:0.81rem">
-              ✅ <b>MX 验证通过！域名 ${escHtml(domainName)} 已自动激活。</b>
+              ${icon('check')} <b>MX 验证通过！域名 ${escHtml(domainName)} 已自动激活。</b>
             </div>`;
-          toast(`✓ ${domainName} 已自动激活`, 'success');
+          toast(`${domainName} 已自动激活`, 'success');
           setTimeout(() => { modal.remove(); navigate(state.account?.is_admin ? 'admin-domains' : 'domains-guide'); }, 2500);
         } else if (statusEl) {
           const ago = d.mx_checked_at ? timeAgo(d.mx_checked_at) : '从未';
           statusEl.innerHTML = `
             <div style="background:var(--clr-warn-bg,#fff8e1);border:1px solid var(--clr-warn,#e6a817);border-radius:6px;padding:0.6rem 0.9rem;font-size:0.81rem">
-              ⏳ 等待中（第 ${attempts} 次检测，上次 ${ago}）…
+              ${icon('timer')} 等待中（第 ${attempts} 次检测，上次 ${ago}）...
             </div>`;
         }
       } catch {}
@@ -1778,7 +1956,8 @@ function renderApiDocs(container) {
   const base = window.location.origin;
   const sections = [
     {
-      title: '🔐 认证方式',
+      icon: 'lock',
+      title: '认证方式',
       desc: '所有 /api/* 接口需要在 HTTP Header 中携带 API Key：',
       code: `# Bearer Token 方式
 curl -H "Authorization: Bearer ${key}" ${base}/api/me
@@ -1787,13 +1966,20 @@ curl -H "Authorization: Bearer ${key}" ${base}/api/me
 curl "${base}/api/me?api_key=${key}"`,
     },
     {
-      title: '📫 1. 创建临时邮箱',
-      desc: 'POST /api/mailboxes — address 和 domain 均为可选字段',
-      code: `# 随机地址 + 随机域名
+      icon: 'mail',
+      title: '1. 创建临时邮箱',
+      desc: 'POST /api/mailboxes — address、domain、mode 均为可选字段；未传 mode 时 API 随机生成单域名或 10-14 级多级域名邮箱',
+      code: `# API 默认：随机地址 + 随机单域名或 10-14 级多级域名邮箱
 curl -s -X POST ${base}/api/mailboxes \\
   -H "Authorization: Bearer ${key}" \\
   -H "Content-Type: application/json" \\
   -d '{}'
+
+# 前端默认行为：普通单级域名邮箱
+curl -s -X POST ${base}/api/mailboxes \\
+  -H "Authorization: Bearer ${key}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"mode": "single"}'
 
 # 指定本地部分（@ 之前），域名随机
 curl -s -X POST ${base}/api/mailboxes \\
@@ -1805,13 +1991,19 @@ curl -s -X POST ${base}/api/mailboxes \\
 curl -s -X POST ${base}/api/mailboxes \\
   -H "Authorization: Bearer ${key}" \\
   -H "Content-Type: application/json" \\
-  -d '{"domain": "example.com"}'
+  -d '{"mode": "single", "domain": "mail.example.com"}'
+
+# 指定通配基础域名，生成多级邮箱
+curl -s -X POST ${base}/api/mailboxes \\
+  -H "Authorization: Bearer ${key}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"mode": "multi", "domain": "example.com"}'
 
 # 同时指定地址和域名
 curl -s -X POST ${base}/api/mailboxes \\
   -H "Authorization: Bearer ${key}" \\
   -H "Content-Type: application/json" \\
-  -d '{"address": "mytestbox", "domain": "example.com"}'
+  -d '{"mode": "single", "address": "mytestbox", "domain": "mail.example.com"}'
 
 # 错误码：
 #   400 → domain 不存在或未激活
@@ -1819,7 +2011,8 @@ curl -s -X POST ${base}/api/mailboxes \\
 #   503 → 系统内无可用域名`,
     },
     {
-      title: '📌 2. 获取邮箱列表',
+      icon: 'clipboard',
+      title: '2. 获取邮箱列表',
       desc: 'GET /api/mailboxes — 获取当前账号下所有邮箱',
       code: `curl -s ${base}/api/mailboxes \\
   -H "Authorization: Bearer ${key}"
@@ -1829,7 +2022,8 @@ curl -s -X POST ${base}/api/mailboxes \\
   -H "Authorization: Bearer ${key}"`,
     },
     {
-      title: '📥 3. 获取邮箱收件箱（邮件列表）',
+      icon: 'inbox',
+      title: '3. 获取邮箱收件箱（邮件列表）',
       desc: 'GET /api/mailboxes/:id/emails — 按收件时间倒序列出邮件摘要',
       code: `MAILBOX_ID="你的邮箱UUID"
 curl -s ${base}/api/mailboxes/$MAILBOX_ID/emails \\
@@ -1840,7 +2034,8 @@ curl -s "${base}/api/mailboxes/$MAILBOX_ID/emails?page=1&size=20" \\
   -H "Authorization: Bearer ${key}"`,
     },
     {
-      title: '📝 4. 读取单封邮件',
+      icon: 'fileText',
+      title: '4. 读取单封邮件',
       desc: 'GET /api/mailboxes/:id/emails/:email_id — 获取邮件完整内容（含 HTML/纯文本和原始数据）',
       code: `MAILBOX_ID="你的邮箱UUID"
 EMAIL_ID="你的邮件UUID"
@@ -1848,20 +2043,23 @@ curl -s ${base}/api/mailboxes/$MAILBOX_ID/emails/$EMAIL_ID \\
   -H "Authorization: Bearer ${key}"`,
     },
     {
-      title: '🗑 5. 删除邮箱',
+      icon: 'trash',
+      title: '5. 删除邮箱',
       desc: 'DELETE /api/mailboxes/:id — 立即删除邮箱及其所有邮件',
       code: `MAILBOX_ID="你的邮箱UUID"
 curl -s -X DELETE ${base}/api/mailboxes/$MAILBOX_ID \\
   -H "Authorization: Bearer ${key}"`,
     },
     {
-      title: '🗑 6. 删除单封邮件',
+      icon: 'trash',
+      title: '6. 删除单封邮件',
       desc: 'DELETE /api/mailboxes/:id/emails/:email_id',
       code: `curl -s -X DELETE ${base}/api/mailboxes/$MAILBOX_ID/emails/$EMAIL_ID \\
   -H "Authorization: Bearer ${key}"`,
     },
     {
-      title: '🧪 7. 完整自动化示例（Shell 脚本）',
+      icon: 'flask',
+      title: '7. 完整自动化示例（Shell 脚本）',
       desc: '创建邮箱 → 等待 5 秒 → 读取邮件 → 清理',
       code: `#!/bin/bash
 BASE="${base}"
@@ -1874,7 +2072,7 @@ MB=$(curl -s -X POST $BASE/api/mailboxes \\
   -d '{}')
 MB_ID=$(echo $MB | python3 -c "import sys,json; print(json.load(sys.stdin)['mailbox']['id'])")
 MB_ADDR=$(echo $MB | python3 -c "import sys,json; print(json.load(sys.stdin)['mailbox']['full_address'])")
-echo "✓ 邮箱: $MB_ADDR (主键: $MB_ID)"
+echo "邮箱: $MB_ADDR (主键: $MB_ID)"
 
 # 2. 向邮箱发送邮件...
 echo "将测试邮件发到: $MB_ADDR"
@@ -1895,10 +2093,11 @@ fi
 # 5. 删除邮箱
 curl -s -X DELETE $BASE/api/mailboxes/$MB_ID \\
   -H "Authorization: Bearer $KEY"
-echo "✓ 邮箱已删除"`,
+echo "邮箱已删除"`,
     },
     {
-      title: '📈 8. 并发压测示例（wrk）',
+      icon: 'chart',
+      title: '8. 并发压测示例（wrk）',
       desc: '对注册接口进行高并发压测，500 并发，持续 30 秒',
       code: `# 安装 wrk: apt install wrk
 
@@ -1937,15 +2136,15 @@ k6 run /tmp/test.js`,
       <div class="api-key-panel">
         <span class="api-key-label">当前 API Key</span>
         <code class="api-key-value" onclick="this.style.filter='none'">${escHtml(key)}</code>
-        <button class="copy-btn" onclick="copyText('${escHtml(key)}')" title="复制">⎘</button>
+        <button class="copy-btn" onclick="copyText('${escHtml(key)}')" title="复制">${icon('copy')}</button>
       </div>
       ${sections.map((s,i) => `
         <div class="card api-doc-card" style="margin-bottom:1rem">
-          <div class="card-header"><div class="card-title">${escHtml(s.title)}</div></div>
+          <div class="card-header"><div class="card-title">${icon(s.icon || 'fileText')} ${escHtml(s.title)}</div></div>
           <div class="card-body">
             <p class="api-doc-desc">${escHtml(s.desc)}</p>
             <div class="api-code-block">
-              <button class="copy-btn api-code-copy" onclick="copyText(${JSON.stringify(s.code)})" title="复制">⎘</button>
+              <button class="copy-btn api-code-copy" onclick="copyText(${JSON.stringify(s.code)})" title="复制">${icon('copy')}</button>
               ${escHtml(s.code)}
             </div>
           </div>

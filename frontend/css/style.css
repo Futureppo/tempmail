@@ -84,6 +84,52 @@ a:hover { text-decoration: underline; }
 button { cursor: pointer; font-family: inherit; }
 input, textarea, select { font-family: inherit; }
 
+.ui-icon {
+  width: 1em;
+  height: 1em;
+  display: inline-block;
+  vertical-align: -0.16em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.btn .ui-icon,
+.btn-theme .ui-icon,
+.btn-logout .ui-icon,
+.nav-icon .ui-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.logo-icon .ui-icon,
+.logo-mark .ui-icon {
+  width: 1.35rem;
+  height: 1.35rem;
+  color: white;
+  stroke-width: 2.2;
+}
+
+.card-title .ui-icon,
+.modal-title .ui-icon,
+.badge .ui-icon,
+.toast .ui-icon,
+.mailbox-stats .ui-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.badge .ui-icon {
+  width: 0.72rem;
+  height: 0.72rem;
+  stroke-width: 2.4;
+}
+
 /* 滚动条美化 */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -572,6 +618,7 @@ img.logo-mark {
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.4rem;
   padding: 0.56rem 1rem;
   border-radius: var(--radius-sm);
@@ -581,6 +628,7 @@ img.logo-mark {
   transition: all var(--transition);
   white-space: nowrap;
   cursor: pointer;
+  line-height: 1.2;
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-primary {
@@ -646,6 +694,65 @@ img.logo-mark {
 }
 [data-theme="dark"] .form-input { background: rgba(255,255,255,0.035); }
 .form-hint { font-size: 0.72rem; color: var(--text-muted); margin-top: 0.3rem; }
+.segmented-control {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem;
+  padding: 0.28rem;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.segmented-control label {
+  min-width: 0;
+}
+.segmented-control input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.segmented-control span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.15rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  transition: background var(--transition), color var(--transition), box-shadow var(--transition);
+}
+.segmented-control input:checked + span {
+  background: var(--bg-card);
+  color: var(--text);
+  box-shadow: 0 4px 16px rgba(15, 17, 18, 0.08);
+}
+.input-affix {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+}
+.input-affix .form-input {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.input-affix span {
+  display: inline-flex;
+  align-items: center;
+  max-width: 45%;
+  padding: 0 0.8rem;
+  border: 1px solid var(--border);
+  border-left: 0;
+  border-top-right-radius: var(--radius-sm);
+  border-bottom-right-radius: var(--radius-sm);
+  background: var(--bg-soft);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .select-wrap {
   position: relative;
 }
@@ -763,8 +870,15 @@ tr:hover td { background: rgba(79,111,82,0.055); }
   transition: color var(--transition);
   flex-shrink: 0;
   font-size: 0.85rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.55rem;
+  min-height: 1.55rem;
 }
 .copy-btn:hover { color: var(--clr-primary); }
+.copy-btn .ui-icon { width: 1rem; height: 1rem; }
 
 /* 邮件列表项 */
 .email-item {
@@ -916,7 +1030,15 @@ tr:hover td { background: rgba(79,111,82,0.055); }
   box-shadow: 0 28px 90px rgba(0,0,0,0.24);
   position: relative;
 }
-.modal-title { font-size: 1.05rem; font-weight: 700; margin-bottom: 1.2rem; color: var(--text); }
+.modal-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 1.2rem;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
 .modal-close {
   position: absolute;
   top: 1rem; right: 1rem;
@@ -926,7 +1048,13 @@ tr:hover td { background: rgba(79,111,82,0.055); }
   color: var(--text-muted);
   cursor: pointer;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
 }
+.modal-close .ui-icon { width: 1.05rem; height: 1.05rem; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.3rem; }
 
 /* 分割线 */
@@ -943,6 +1071,7 @@ tr:hover td { background: rgba(79,111,82,0.055); }
   color: var(--text-muted);
 }
 .empty-state .empty-icon { font-size: 2.5rem; margin-bottom: 0.8rem; display: block; }
+.empty-state .empty-icon .ui-icon { width: 2.5rem; height: 2.5rem; }
 .empty-state p { font-size: 0.88rem; }
 
 /* loading spinner */
@@ -1022,6 +1151,7 @@ tr:hover td { background: rgba(79,111,82,0.055); }
   padding: 2rem 1rem;
 }
 .apikey-hero .big-icon { font-size: 3rem; margin-bottom: 1rem; display: block; }
+.apikey-hero .big-icon .ui-icon { width: 3rem; height: 3rem; }
 .apikey-hero h2 { font-size: 1.15rem; font-weight: 700; margin-bottom: 0.5rem; }
 .apikey-hero p { font-size: 0.84rem; color: var(--text-muted); margin-bottom: 1.5rem; }
 
@@ -1212,9 +1342,12 @@ tr:hover td { background: rgba(79,111,82,0.055); }
   }
   .sidebar-logo { justify-content: center; padding: 1rem 0.5rem; }
   .nav-item { justify-content: center; padding: 0.7rem; }
+  .nav-item .nav-icon { display: inline-flex !important; }
+  .nav-item .nav-icon .ui-icon { display: inline-flex !important; }
   .sidebar-bottom { padding: 0.5rem; }
   .user-chip { justify-content: center; }
   .btn-logout, .btn-theme { font-size: 0; padding: 0.45rem 0; }
+  .btn-logout .ui-icon, .btn-theme .ui-icon { width: 1rem; height: 1rem; }
   .page { padding: 1rem; }
 }
 

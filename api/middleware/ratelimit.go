@@ -19,6 +19,9 @@ func RateLimit(rdb *redis.Client, limit int, window int) gin.HandlerFunc {
 		// 使用 API Key 作为限速键
 		key := c.GetHeader("Authorization")
 		if key == "" {
+			key = c.GetHeader("X-API-Key")
+		}
+		if key == "" {
 			key = c.Query("api_key")
 		}
 		if key == "" {

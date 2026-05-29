@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -62,6 +63,21 @@ func (c *emailCounters) drain() (int64, map[uuid.UUID]int64) {
 type Store struct {
 	pool     *pgxpool.Pool
 	counters emailCounters
+}
+
+const (
+	DomainTypeExact    = "exact"
+	DomainTypeWildcard = "wildcard"
+)
+
+var domainLabelPattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
+
+type DomainInUseError struct {
+	MailboxCount int
+}
+
+func (e *DomainInUseError) Error() string {
+	return fmt.Sprintf("domain is used by %d mailbox(es)", e.MailboxCount)
 }
 
 // New 创建带连接池的 Store（高并发核心）
@@ -209,12 +225,14 @@ func (s *Store) GetAdminAPIKey(ctx context.Context) (string, error) {
 // ==================== Domain ====================
 
 func (s *Store) AddDomain(ctx context.Context, domain string) (*model.Domain, error) {
+	canonicalDomain, domainType, baseDomain := NormalizeDomain(domain)
 	var d model.Domain
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO domains (domain, is_active, status) VALUES ($1, TRUE, 'active')
-		 RETURNING id, domain, is_active, status, created_at, mx_checked_at`,
-		strings.ToLower(domain),
-	).Scan(&d.ID, &d.Domain, &d.IsActive, &d.Status, &d.CreatedAt, &d.MxCheckedAt)
+		`INSERT INTO domains (domain, domain_type, base_domain, is_active, status)
+		 VALUES ($1, $2, $3, TRUE, 'active')
+		 RETURNING id, domain, domain_type, base_domain, is_active, status, created_at, mx_checked_at`,
+		canonicalDomain, domainType, baseDomain,
+	).Scan(&d.ID, &d.Domain, &d.DomainType, &d.BaseDomain, &d.IsActive, &d.Status, &d.CreatedAt, &d.MxCheckedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -223,15 +241,19 @@ func (s *Store) AddDomain(ctx context.Context, domain string) (*model.Domain, er
 
 // AddDomainPending 添加待验证域名（后台轮询 MX 记录）
 func (s *Store) AddDomainPending(ctx context.Context, domain string) (*model.Domain, error) {
+	canonicalDomain, domainType, baseDomain := NormalizeDomain(domain)
 	var d model.Domain
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO domains (domain, is_active, status) VALUES ($1, FALSE, 'pending')
+		`INSERT INTO domains (domain, domain_type, base_domain, is_active, status)
+		 VALUES ($1, $2, $3, FALSE, 'pending')
 		 ON CONFLICT (domain) DO UPDATE
 		   SET status = CASE WHEN domains.status = 'active' THEN 'active' ELSE 'pending' END,
-		       is_active = CASE WHEN domains.status = 'active' THEN TRUE ELSE FALSE END
-		 RETURNING id, domain, is_active, status, created_at, mx_checked_at`,
-		strings.ToLower(domain),
-	).Scan(&d.ID, &d.Domain, &d.IsActive, &d.Status, &d.CreatedAt, &d.MxCheckedAt)
+		       is_active = CASE WHEN domains.status = 'active' THEN TRUE ELSE FALSE END,
+		       domain_type = EXCLUDED.domain_type,
+		       base_domain = EXCLUDED.base_domain
+		 RETURNING id, domain, domain_type, base_domain, is_active, status, created_at, mx_checked_at`,
+		canonicalDomain, domainType, baseDomain,
+	).Scan(&d.ID, &d.Domain, &d.DomainType, &d.BaseDomain, &d.IsActive, &d.Status, &d.CreatedAt, &d.MxCheckedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +262,8 @@ func (s *Store) AddDomainPending(ctx context.Context, domain string) (*model.Dom
 
 func (s *Store) ListDomains(ctx context.Context) ([]model.Domain, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, domain, is_active, status, created_at, mx_checked_at FROM domains ORDER BY created_at`)
+		`SELECT id, domain, domain_type, base_domain, is_active, status, created_at, mx_checked_at
+		 FROM domains ORDER BY created_at`)
 	if err != nil {
 		return nil, err
 	}
@@ -250,7 +273,8 @@ func (s *Store) ListDomains(ctx context.Context) ([]model.Domain, error) {
 
 func (s *Store) GetActiveDomains(ctx context.Context) ([]model.Domain, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, domain, is_active, status, created_at, mx_checked_at FROM domains WHERE is_active = TRUE`)
+		`SELECT id, domain, domain_type, base_domain, is_active, status, created_at, mx_checked_at
+		 FROM domains WHERE is_active = TRUE`)
 	if err != nil {
 		return nil, err
 	}
@@ -259,11 +283,17 @@ func (s *Store) GetActiveDomains(ctx context.Context) ([]model.Domain, error) {
 }
 
 func (s *Store) GetRandomActiveDomain(ctx context.Context) (*model.Domain, error) {
+	return s.GetRandomActiveDomainByType(ctx, DomainTypeExact)
+}
+
+func (s *Store) GetRandomActiveDomainByType(ctx context.Context, domainType string) (*model.Domain, error) {
 	var d model.Domain
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, domain, is_active, status, created_at, mx_checked_at FROM domains
-		 WHERE is_active = TRUE ORDER BY RANDOM() LIMIT 1`,
-	).Scan(&d.ID, &d.Domain, &d.IsActive, &d.Status, &d.CreatedAt, &d.MxCheckedAt)
+		`SELECT id, domain, domain_type, base_domain, is_active, status, created_at, mx_checked_at
+		 FROM domains WHERE is_active = TRUE AND domain_type = $1
+		 ORDER BY RANDOM() LIMIT 1`,
+		domainType,
+	).Scan(&d.ID, &d.Domain, &d.DomainType, &d.BaseDomain, &d.IsActive, &d.Status, &d.CreatedAt, &d.MxCheckedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -272,12 +302,13 @@ func (s *Store) GetRandomActiveDomain(ctx context.Context) (*model.Domain, error
 
 // GetDomainByName 按域名字符串查找活跃域名，供创建邮箱时指定域名使用
 func (s *Store) GetDomainByName(ctx context.Context, domain string) (*model.Domain, error) {
+	canonicalDomain, _, _ := NormalizeDomain(domain)
 	var d model.Domain
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, domain, is_active, status, created_at, mx_checked_at
+		`SELECT id, domain, domain_type, base_domain, is_active, status, created_at, mx_checked_at
 		 FROM domains WHERE domain = $1 AND is_active = TRUE`,
-		strings.ToLower(domain),
-	).Scan(&d.ID, &d.Domain, &d.IsActive, &d.Status, &d.CreatedAt, &d.MxCheckedAt)
+		canonicalDomain,
+	).Scan(&d.ID, &d.Domain, &d.DomainType, &d.BaseDomain, &d.IsActive, &d.Status, &d.CreatedAt, &d.MxCheckedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -287,9 +318,10 @@ func (s *Store) GetDomainByName(ctx context.Context, domain string) (*model.Doma
 func (s *Store) GetDomainByID(ctx context.Context, domainID int) (*model.Domain, error) {
 	var d model.Domain
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, domain, is_active, status, created_at, mx_checked_at FROM domains WHERE id = $1`,
+		`SELECT id, domain, domain_type, base_domain, is_active, status, created_at, mx_checked_at
+		 FROM domains WHERE id = $1`,
 		domainID,
-	).Scan(&d.ID, &d.Domain, &d.IsActive, &d.Status, &d.CreatedAt, &d.MxCheckedAt)
+	).Scan(&d.ID, &d.Domain, &d.DomainType, &d.BaseDomain, &d.IsActive, &d.Status, &d.CreatedAt, &d.MxCheckedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -299,7 +331,7 @@ func (s *Store) GetDomainByID(ctx context.Context, domainID int) (*model.Domain,
 // ListPendingDomains 返回所有待验证域名
 func (s *Store) ListPendingDomains(ctx context.Context) ([]model.Domain, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, domain, is_active, status, created_at, mx_checked_at
+		`SELECT id, domain, domain_type, base_domain, is_active, status, created_at, mx_checked_at
 		 FROM domains WHERE status = 'pending'
 		 ORDER BY created_at`)
 	if err != nil {
@@ -334,7 +366,21 @@ func (s *Store) DisableDomainMX(ctx context.Context, domainID int) error {
 }
 
 func (s *Store) DeleteDomain(ctx context.Context, domainID int) error {
-	_, err := s.pool.Exec(ctx, `DELETE FROM domains WHERE id = $1`, domainID)
+	var mailboxCount int
+	if err := s.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM mailboxes WHERE domain_id = $1`,
+		domainID,
+	).Scan(&mailboxCount); err != nil {
+		return err
+	}
+	if mailboxCount > 0 {
+		return &DomainInUseError{MailboxCount: mailboxCount}
+	}
+
+	tag, err := s.pool.Exec(ctx, `DELETE FROM domains WHERE id = $1`, domainID)
+	if err == nil && tag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
 	return err
 }
 
@@ -466,29 +512,100 @@ func (s *Store) DeleteExpiredMailboxes(ctx context.Context) (int64, error) {
 	return tag.RowsAffected(), nil
 }
 
-// CheckDomainMX 检测域名MX记录是否指向指定服务器IP
+// NormalizeDomain 将用户输入规整为存储格式。
+// "*.example.com" 作为 wildcard 记录存储，base_domain 为 "example.com"。
+func NormalizeDomain(domain string) (canonicalDomain, domainType, baseDomain string) {
+	d := strings.ToLower(strings.TrimSpace(strings.TrimSuffix(domain, ".")))
+	if strings.HasPrefix(d, "*.") {
+		base := strings.TrimPrefix(d, "*.")
+		return "*." + base, DomainTypeWildcard, base
+	}
+	return d, DomainTypeExact, d
+}
+
+func DomainMXLookupName(domain string) string {
+	_, domainType, baseDomain := NormalizeDomain(domain)
+	if domainType == DomainTypeWildcard {
+		return "mx-check.gmail.outlook.mail.com.net." + baseDomain
+	}
+	return baseDomain
+}
+
+type MXCheckDetail struct {
+	Kind    string   `json:"kind"`
+	Name    string   `json:"name"`
+	Matched bool     `json:"matched"`
+	MXHosts []string `json:"mx_hosts"`
+	Status  string   `json:"status"`
+}
+
+// CheckDomainMX 检测域名MX记录是否指向指定服务器IP。
+// 通配域名会同时查询基础域名和一个代表性多级主机名，分别验证基础收信和 wildcard DNS/MX。
 func CheckDomainMX(domain, serverIP string) (matched bool, mxHosts []string, status string) {
-	mxRecords, err := net.LookupMX(domain)
+	matched, details, status := CheckDomainMXDetails(domain, serverIP)
+	seen := make(map[string]bool)
+	for _, detail := range details {
+		for _, host := range detail.MXHosts {
+			if !seen[host] {
+				seen[host] = true
+				mxHosts = append(mxHosts, host)
+			}
+		}
+	}
+	return matched, mxHosts, status
+}
+
+func CheckDomainMXDetails(domain, serverIP string) (matched bool, details []MXCheckDetail, status string) {
+	_, domainType, baseDomain := NormalizeDomain(domain)
+	targets := []MXCheckDetail{{Kind: "exact", Name: baseDomain}}
+	if domainType == DomainTypeWildcard {
+		targets = []MXCheckDetail{
+			{Kind: "base", Name: baseDomain},
+			{Kind: "wildcard", Name: DomainMXLookupName(domain)},
+		}
+	}
+
+	allMatched := true
+	statuses := make([]string, 0, len(targets))
+	for _, target := range targets {
+		detail := checkMXName(target.Kind, target.Name, serverIP)
+		if !detail.Matched {
+			allMatched = false
+		}
+		statuses = append(statuses, fmt.Sprintf("%s: %s", detail.Name, detail.Status))
+		details = append(details, detail)
+	}
+	return allMatched, details, strings.Join(statuses, "；")
+}
+
+func checkMXName(kind, lookupName, serverIP string) MXCheckDetail {
+	detail := MXCheckDetail{Kind: kind, Name: lookupName}
+	mxRecords, err := net.LookupMX(lookupName)
 	if err != nil {
-		return false, nil, fmt.Sprintf("DNS查询失败: %v", err)
+		detail.Status = fmt.Sprintf("DNS查询失败: %v", err)
+		return detail
 	}
 	if len(mxRecords) == 0 {
-		return false, nil, "未找到MX记录，请先配置MX记录"
+		detail.Status = "未找到MX记录"
+		return detail
 	}
 	for _, mx := range mxRecords {
 		host := strings.TrimSuffix(mx.Host, ".")
-		mxHosts = append(mxHosts, host)
+		detail.MXHosts = append(detail.MXHosts, host)
 		addrs, err := net.LookupHost(host)
 		if err != nil {
 			continue
 		}
 		for _, addr := range addrs {
 			if addr == serverIP {
-				return true, mxHosts, fmt.Sprintf("✓ MX记录匹配：%s → %s", host, addr)
+				detail.Matched = true
+				detail.Status = fmt.Sprintf("MX记录匹配：%s → %s", host, addr)
+				return detail
 			}
 		}
 	}
-	return false, mxHosts, fmt.Sprintf("MX记录(%s)未指向本服务器(%s)", strings.Join(mxHosts, ","), serverIP)
+	detail.Status = fmt.Sprintf("MX记录(%s)未指向本服务器(%s)", strings.Join(detail.MXHosts, ","), serverIP)
+	return detail
 }
 
 // ==================== Email ====================
@@ -635,4 +752,46 @@ func GenerateRandomAddress() string {
 		result[i] = chars[n.Int64()]
 	}
 	return string(result)
+}
+
+func RandomBool() bool {
+	n, _ := rand.Int(rand.Reader, big.NewInt(2))
+	return n.Int64() == 1
+}
+
+func GenerateMultiLevelDomain(baseDomain string) string {
+	providers := []string{"gmail", "outlook", "hotmail", "yahoo", "icloud", "proton", "aol", "zoho"}
+	mailWords := []string{"mail", "email", "inbox", "smtp", "mx", "webmail", "post"}
+	tlds := []string{"com", "net", "org", "io", "co", "app", "dev"}
+	pools := [][]string{providers, mailWords, tlds}
+
+	pick := func(values []string) string {
+		n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(values))))
+		return values[n.Int64()]
+	}
+	pickPool := func() []string {
+		n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(pools))))
+		return pools[n.Int64()]
+	}
+
+	levelOffset, _ := rand.Int(rand.Reader, big.NewInt(5))
+	labelCount := 10 + int(levelOffset.Int64())
+	labels := make([]string, 0, labelCount)
+	for len(labels) < labelCount {
+		labels = append(labels, pick(pickPool()))
+	}
+	return strings.Join(labels, ".") + "." + strings.ToLower(strings.TrimSpace(baseDomain))
+}
+
+func JoinCustomSubdomain(subdomain, baseDomain string) (string, error) {
+	labels := strings.Split(strings.ToLower(strings.Trim(strings.TrimSpace(subdomain), ".")), ".")
+	if len(labels) == 0 {
+		return "", fmt.Errorf("subdomain is required")
+	}
+	for _, label := range labels {
+		if !domainLabelPattern.MatchString(label) {
+			return "", fmt.Errorf("invalid subdomain label: %s", label)
+		}
+	}
+	return strings.Join(labels, ".") + "." + strings.ToLower(strings.TrimSpace(baseDomain)), nil
 }

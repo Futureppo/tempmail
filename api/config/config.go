@@ -24,7 +24,7 @@ func Load() *Config {
 	rw, _ := strconv.Atoi(getEnv("RATE_WINDOW", "60"))
 
 	return &Config{
-		// ★ PORT：API 容器内监听端口，默认 8080。
+		// PORT：API 容器内监听端口，默认 8080。
 		// 由 .env 中的 API_PORT 注入。修改此端口后需同步：
 		//   1. .env / .env.example 的 API_PORT
 		//   2. docker-compose.yml api.ports 右边数字
@@ -33,7 +33,7 @@ func Load() *Config {
 		//   5. postfix/mail-receiver.py API_URL 默认值
 		Port:  getEnv("PORT", "8080"),
 		DBDSN: getEnv("DB_DSN", ""),
-		// ★ RedisAddr：Redis 容器内部地址，格式 "host:port"。
+		// RedisAddr：Redis 容器内部地址，格式 "host:port"。
 		// 默认 "redis:6379"，"redis" 是 Docker 内部服务名，不需要修改。
 		RedisAddr:           getEnv("REDIS_ADDR", "redis:6379"),
 		RedisPassword:       getEnv("REDIS_PASSWORD", ""),

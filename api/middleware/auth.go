@@ -17,6 +17,9 @@ func Auth(s *store.Store) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		apiKey := c.GetHeader("Authorization")
 		if apiKey == "" {
+			apiKey = c.GetHeader("X-API-Key")
+		}
+		if apiKey == "" {
 			apiKey = c.Query("api_key")
 		}
 
@@ -26,7 +29,7 @@ func Auth(s *store.Store) gin.HandlerFunc {
 
 		if apiKey == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error": "missing api_key: use Authorization header or ?api_key= query param",
+				"error": "missing api_key: use Authorization, X-API-Key, or ?api_key= query param",
 			})
 			return
 		}
